@@ -1,5 +1,5 @@
 :root { --primary: #d81b60; --dark-pink: #ad1457; --bg: #f9f9f9; --text: #333; }
-body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-top: 100px; display: flex; flex-direction: column; align-items: center; color: var(--text); }
+body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding-top: 100px; display: flex; flex-direction: column; align-items: center; color: var(--text); overflow-x: hidden; width: 100vw; }
 
 /* CABEÇALHO FIXO ESTILO LUZ VIOLETA */
 header {
@@ -78,3 +78,27 @@ body.dark-mode header, body.dark-mode #mainHeader, body.dark-mode #telaLogin { b
 body.dark-mode .history-log { border-top-color: #444; color: #bbb; }
 body.dark-mode .history-item { border-bottom-color: #444; }
 body.dark-mode .logo-area img { background: #333; }
+
+/* --- RESPONSIVIDADE PARA CELULAR (PWA) --- */
+@media (max-width: 768px) {
+    header {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 10px 15px 0 15px;
+    }
+    body { padding-top: 120px; }
+    .logo-area img { height: 40px; }
+    
+    /* Transforma as abas em um menu arrastável (Scroll horizontal) */
+    nav {
+        order: 3; /* Joga o menu pra linha de baixo do logo */
+        width: 100%;
+        overflow-x: auto;
+        padding: 10px 0;
+        gap: 10px;
+    }
+    nav::-webkit-scrollbar { display: none; } /* Esconde barrinha de rolagem para visual de App */
+    nav a { flex-shrink: 0; padding: 8px 12px; font-size: 13px; }
+    .container { width: 95%; padding: 20px; box-sizing: border-box; }
+    .result-box { overflow-x: auto; } /* Impede que tabelas de relatórios travem a tela */
+}
