@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema Integrado - Miss Rôse</title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#d81b60">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="logo_missrose.png">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://unpkg.com/imask"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<!-- MODAL DO RECIBO -->
+<div id="modalRecibo" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 3000; display: none; align-items: center; justify-content: center; overflow-y: auto; padding: 20px; box-sizing: border-box;">
+    <div style="background: #f4f4f4; padding: 20px; border-radius: 10px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; align-items: center;">
+        
+        <div style="display: flex; gap: 15px; margin-bottom: 20px; width: 100%; justify-content: center;">
+            <button onclick="baixarPDFReciboVisivel()" style="width: auto; padding: 10px 20px; margin: 0; font-size: 15px; background: #28a745;"><i class="fas fa-file-pdf"></i> Baixar PDF</button>
+            <button onclick="imprimirReciboNativo()" style="width: auto; padding: 10px 20px; margin: 0; font-size: 15px; background: #17a2b8;"><i class="fas fa-print"></i> Imprimir</button>
+            <button onclick="fecharModalRecibo()" style="width: auto; padding: 10px 20px; margin: 0; font-size: 15px; background: #dc3545;"><i class="fas fa-times"></i> Fechar</button>
+        </div>
+
+        <div id="templateReciboPDF" style="background: white; padding: 40px; color: black !important; font-family: Arial, sans-serif; width: 750px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+    
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #d81b60; padding-bottom: 15px; margin-bottom: 20px;">
+            <img src="logo_missrose.png" style="display: block; width: 150px; height: auto;">
+            <div style="text-align: right;">
+                <h1 style="margin: 0; color: #d81b60; font-size: 24px;">Recibo de Comissões</h1>
+                <p style="margin: 5px 0 0; font-size: 14px; color: #666;">Gerado em: <span id="pdfDataGeracao"></span></p>
+            </div>
+        </div>
+
+        <div style="background-color: #f4f4f4; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <p style="margin: 0 0 5px 0; color: black !important;"><strong>VENDEDORA:</strong> <span id="reciboVendedora" style="text-transform: uppercase;"></span></p>
+            <p style="margin: 0; color: black !important;"><strong>PERÍODO:</strong> <span id="reciboMes"></span></p>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+            <thead>
+                <tr style="background-color: #d81b60; color: white;">
+                    <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Data</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Cliente</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Valor Venda</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; text-align: right;">Comissão</th>
+                </tr>
+            </thead>
+            <tbody id="reciboTabelaBody" style="color: black !important;">
+                <!-- Preenchido automaticamente via JS -->
+            </tbody>
+        </table>
+
+        <div style="text-align: right; border-top: 2px solid #eee; padding-top: 15px;">
+            <h2 style="margin: 0; color: black !important;">Total a Receber: <span style="color: #d81b60;" id="reciboTotal">R$ 0,00</span></h2>
+        </div>
+    </div>
+</div>
+</div>
+
+    <div id="telaLogin" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, var(--primary), var(--dark-pink)); z-index: 2000; display: flex; align-items: center; justify-content: center;">
+    <div class="container" style="max-width: 350px; border-top: none;">
+        <img src="logo_missrose.png" style="width: 150px; margin-bottom: 20px; background: white; padding: 10px; border-radius: 10px;">
+        
+        <!-- ABAS DE NAVEGAÇÃO -->
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; width: 100%;">
+            <button id="btnTabEntrar" onclick="alternarAbaAuth('entrar')" style="flex: 1; padding: 10px; font-size: 14px;">Entrar</button>
+            <button id="btnTabCadastrar" onclick="alternarAbaAuth('cadastrar')" style="flex: 1; background: #ccc; color: #333; padding: 10px; font-size: 14px;">Cadastrar</button>
+        </div>
+
+        <h2 id="tituloAuth" style="color: var(--primary); margin-bottom: 20px;">Acesso Restrito</h2>
+        
+        <!-- FORMULÁRIO DE LOGIN -->
+        <div id="formEntrar">
+            <label>Seu Nome (Vendedora):</label>
+            <input type="text" id="userLogin" placeholder="Digite seu usuário...">
+            <label>Senha:</label>
+            <input type="password" id="senhaLogin" placeholder="Digite sua senha">
+            <button onclick="realizarLogin()">🔓 Entrar no Sistema</button>
+        </div>
+
+        <!-- FORMULÁRIO DE CADASTRO -->
+        <div id="formCadastrar" class="hidden">
+            <label>Nome Completo:</label>
+            <input type="text" id="novoNome" placeholder="Ex: Maria Silva">
+            <label>Crie uma Senha:</label>
+            <input type="password" id="novaSenha" placeholder="Mínimo 4 caracteres">
+            <button onclick="cadastrarNovoVendedor()">💾 Salvar Cadastro</button>
+        </div>
+
+        <div id="loginStatus" style="color: red; font-size: 13px; margin-top: 10px; display: none;"></div>
+    </div>
+</div>
+
+<header id="mainHeader">
+    <div class="logo-area">
+        <img src="logo_missrose.png" alt="MISS RÔSE">
+    </div>
+    <nav>
+        <a id="navDashboard" onclick="alternarTela('dashboard')"><i class="fas fa-chart-line"></i> Dashboard</a>
+        <a id="navComissoes" class="active" onclick="alternarTela('comissoes')"><i class="fas fa-users"></i> Comissões</a>
+        <a id="navFornecedores" onclick="alternarTela('fornecedores')"><i class="fas fa-truck"></i> Fornecedores e Clientes</a>
+        <a id="navPlanilhas" onclick="alternarTela('planilhas')"><i class="fas fa-table"></i> PLANILHAS </a>
+    </nav>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <i id="btnDarkMode" class="fas fa-moon" onclick="toggleDarkMode()" style="color: white; cursor: pointer; font-size: 20px;" title="Modo Escuro"></i>
+        <div id="nomeUsuarioHeader" onclick="abrirModalLogin()" style="color: white; font-weight: bold; cursor: pointer;">
+            <i class="fas fa-user-circle"></i> <span id="userNameDisplay">Fazer Login</span> 
+        </div>
+    </div>
+</header>
+
+<div id="telaDashboard" class="container hidden">
+    <h2>Visão Geral de Desempenho</h2>
+
+    <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px; gap: 10px; flex-wrap: wrap;">
+        <label style="margin: 0; font-size: 14px;">Mês/Ano:</label>
+        <select id="filtroMesDash" onchange="carregarDashboardReal()" style="width: auto; margin: 0; padding: 8px 15px; border-radius: 8px; border: 1px solid var(--primary); background: #fff; font-weight: bold; color: var(--primary); cursor: pointer;">
+            <option value="JANEIRO">JANEIRO</option>
+            <option value="FEVEREIRO">FEVEREIRO</option>
+            <option value="MARÇO">MARÇO</option>
+            <option value="ABRIL">ABRIL</option>
+            <option value="MAIO">MAIO</option>
+            <option value="JUNHO">JUNHO</option>
+            <option value="JULHO">JULHO</option>
+            <option value="AGOSTO">AGOSTO</option>
+            <option value="SETEMBRO">SETEMBRO</option>
+            <option value="OUTUBRO">OUTUBRO</option>
+            <option value="NOVEMBRO">NOVEMBRO</option>
+            <option value="DEZEMBRO">DEZEMBRO</option>
+        </select>
+        <select id="filtroAnoDash" onchange="carregarDashboardReal()" style="width: auto; margin: 0; padding: 8px 15px; border-radius: 8px; border: 1px solid var(--primary); background: #fff; font-weight: bold; color: var(--primary); cursor: pointer;">
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+        </select>
+
+        <button id="btnVerRecibo" onclick="abrirModalRecibo()" style="width: auto; padding: 8px 15px; margin: 0; font-size: 13px; background: #34495e;"><i class="fas fa-eye"></i> Ver Recibo</button>
+    </div>
+
+    <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px; gap: 10px; flex-wrap: wrap;">
+        <label style="margin: 0; font-size: 14px;">Data escolhida:</label>
+        <input type="date" id="filtroDataInicio" onchange="carregarDashboardReal()" style="width: auto; margin: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--primary); font-family: inherit; font-size: 13px;" title="Data Inicial">
+        <span style="font-size: 14px;">à</span>
+        <input type="date" id="filtroDataFim" onchange="carregarDashboardReal()" style="width: auto; margin: 0; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--primary); font-family: inherit; font-size: 13px;" title="Data Final">
+        
+        <select id="filtroVendedoraDash" onchange="carregarDashboardReal()" style="display: none; width: auto; margin: 0; padding: 8px 15px; border-radius: 8px; border: 1px solid var(--primary); background: #fff; font-weight: bold; color: var(--primary); cursor: pointer;">
+            <option value="TODAS">Vendedoras (Todas)</option>
+        </select>
+    </div>
+
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-info"><h3>Vendido (Mês)</h3><p id="kpiFaturamento">R$ 0,00</p></div>
+            <i class="fas fa-dollar-sign kpi-icon"></i>
+        </div>
+        <div class="kpi-card" style="border-left-color: #8e44ad;">
+            <div class="kpi-info"><h3>Total de Pedidos</h3><p id="kpiPedidos">0</p></div>
+            <i class="fas fa-shopping-cart kpi-icon" style="color: #8e44ad;"></i>
+        </div>
+        <div class="kpi-card" style="border-left-color: orange;">
+            <div class="kpi-info"><h3>Comissões Pendentes</h3><p id="kpiPendente">R$ 0,00</p></div>
+            <i class="fas fa-clock kpi-icon" style="color: orange;"></i>
+        </div>
+        <div class="kpi-card" style="border-left-color: #28a745;">
+            <div class="kpi-info"><h3>Comissões Líquidas</h3><p id="kpiLiquido">R$ 0,00</p></div>
+            <i class="fas fa-check-circle kpi-icon" style="color: #28a745;"></i>
+        </div>
+    </div>
+
+    <!-- GRÁFICOS EM TEMPO REAL -->
+    <div class="chart-grid">
+        <div class="chart-card">
+            <h3>Faturamento Mensal (Anual)</h3>
+            <div style="position: relative; height: 250px; width: 100%;">
+                <canvas id="graficoMensal"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>Ranking Vendedoras (Mês)</h3>
+            <div style="position: relative; height: 250px; width: 100%;">
+                <canvas id="graficoVendedoras"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- INFERIOR DO DASH: TOP CLIENTES E TABELA GERAL -->
+    <div class="dash-bottom-grid">
+        <!-- TABELA DE ÚLTIMAS VENDAS GERAIS (ESTILO DASHBOARD) -->
+        <div class="result-box" style="margin-top: 0; max-height: 350px; overflow-y: auto; padding: 0; border: 1px solid #ddd;">
+            <h3 style="margin: 0; padding: 15px; background: #f1f3f5; color: var(--primary); border-bottom: 1px solid #ddd; position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center;">
+                <span><i class="fas fa-list-alt"></i> Relatório de Últimas Vendas</span>
+                <button onclick="exportarTabelaExcel()" style="width: auto; padding: 5px 15px; margin: 0; font-size: 12px; background: #28a745;"><i class="fas fa-file-excel"></i> Exportar</button>
+            </h3>
+            <table id="tabelaExportar" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                <thead>
+                    <tr style="background: #fff; border-bottom: 2px solid #ddd;">
+                        <th style="padding: 10px 15px; color: #555;">Data</th>
+                        <th style="padding: 10px 15px; color: #555;">Vendedora</th>
+                        <th style="padding: 10px 15px; color: #555;">Empresa</th>
+                        <th style="padding: 10px 15px; color: #555;">Cliente (Razão Social)</th>
+                        <th style="padding: 10px 15px; color: #555;">Valor (R$)</th>
+                        <th style="padding: 10px 15px; color: #555;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tabelaVendasDash">
+                    <tr><td colspan="6" style="text-align: center; padding: 20px;">⏳ Carregando dados ao vivo...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="result-box" style="margin-top: 0; padding: 0; border: 1px solid #ddd; display: flex; flex-direction: column;">
+            <h3 style="margin: 0; padding: 15px; background: #f1f3f5; color: var(--primary); border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 8px; position: sticky; top: 0;">
+                <i class="fas fa-trophy"></i> Top 5 Clientes (Mês)
+            </h3>
+            <div id="listaTopClientesDash" style="flex: 1; overflow-y: auto;">
+                <div style="padding: 20px; text-align: center;">⏳ Carregando...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="telaComissoes" class="container">
+        <div id="resumoComissao" class="result-box" style="display: block; background: #fff3f8; border: 1px dashed var(--primary);">
+        <p><strong>💰 Comissão Vendedora:</strong> <span id="valComisVend">R$ 0,00</span></p>
+        <div id="resumoRep" class="hidden">
+            <p><strong>🤝 Comissão Representante:</strong> <span id="valComisRep">R$ 0,00</span></p>
+        </div>
+    </div>
+    <h2>Sistema de Comissões</h2>
+    
+    <label>Empresa:</label>
+    <select id="empresaSelecionada">
+        <option value="MISS RÔSE">MISS RÔSE</option>
+        <option value="WIKE MAKE">WIKE MAKE</option>
+        <option value="HABIBI">HABIBI</option>
+    </select>
+
+    <label>Equipe:</label>
+    <select id="equipe" onchange="mudarCorEquipe()">
+        <option value="Renata">Equipe Renata</option>
+        <option value="Carol">Equipe Carol</option>
+    </select>
+
+    <label>Vendedora Principal:</label>
+    <select id="vendedora">
+        <option value="">Selecione...</option>
+        <option value="Vendedora 1">Vendedora 1</option>
+        <option value="Vendedora 2">Vendedora 2</option>
+        <option value="Vendedora 3">Vendedora 3</option>
+        <option value="Vendedora 4">Vendedora 4</option>
+        <option value="Vendedora 5">Vendedora 5</option>
+    </select>
+
+    <div id="divTipoVendedora">
+        <label>Tipo Vendedora:</label>
+        <select id="tipoVendedora"><option value="Interno">Interno</option><option value="Externo">Externo</option></select>
+    </div>
+
+    <label>Tipo de Venda:</label>
+    <select id="tipoVenda" onchange="toggleRepresentante()">
+        <option value="direta">Venda Direta</option>
+        <option value="representante">Com Representante</option>
+    </select>
+
+<div id="campoRepresentante" class="hidden">
+    <label>Nome do Representante:</label>
+    <select id="nomeRepresentante">
+        <option value="">Selecione o Representante...</option>
+        <option value="ABBAS">ABBAS</option>
+        <option value="ANA CAROLINA REPRESENTAÇÃO">ANA CAROLINA REPRESENTAÇÃO</option>
+        <option value="C.S.S COMERCIO DE COSMETICOS">C.S.S COMERCIO DE COSMETICOS</option>
+        <option value="CANONICE & SILVA REPRESENTAÇÕES">CANONICE & SILVA REPRESENTAÇÕES</option>
+        <option value="CAREN BUZZO">CAREN BUZZO</option>
+        <option value="D G REPRESENTAÇÕES (DIRAN)">D G REPRESENTAÇÕES (DIRAN)</option>
+        <option value="DIOGO FELIPE GONÇALVES">DIOGO FELIPE GONÇALVES</option>
+        <option value="DIRECT VENDAS">DIRECT VENDAS</option>
+        <option value="ELLOBAHIA">ELLOBAHIA</option>
+        <option value="F. MACARIO">F. MACARIO</option>
+        <option value="GABRIELA AGUIRRE GIESE">GABRIELA AGUIRRE GIESE</option>
+        <option value="JAQUELINE">JAQUELINE</option>
+        <option value="KATIA REPRESENTAÇÃO">KATIA REPRESENTAÇÃO</option>
+        <option value="MARRA REPRESENTAÇÕES">MARRA REPRESENTAÇÕES</option>
+        <option value="MAURICIO REPRESENTAÇÃO">MAURICIO REPRESENTAÇÃO</option>
+        <option value="ODAIR MACHADO">ODAIR MACHADO</option>
+        <option value="P.C. NASCIMENTO (PAMELA)">P.C. NASCIMENTO (PAMELA)</option>
+        <option value="PEF REPRENTAÇÕES">PEF REPRENTAÇÕES</option>
+        <option value="RAFAELA CATAPANO">RAFAELA CATAPANO</option>
+        <option value="ROBERTO RIVELINO">ROBERTO RIVELINO</option>
+        <option value="SANDRA MARIA REPRESENTAÇÃO">SANDRA MARIA REPRESENTAÇÃO</option>
+        <option value="TM COMERCIAL E DISTRIBUIÇÃO">TM COMERCIAL E DISTRIBUIÇÃO</option>
+        <option value="TOM REPRESENTAÇÕES (WELLINGTON)">TOM REPRESENTAÇÕES (WELLINGTON)</option>
+        <option value="VANIA MARIA">VANIA MARIA</option>
+        <option value="VC REPRESENTAÇÃO">VC REPRESENTAÇÃO</option>
+    </select>
+
+    <label>Tipo Representante:</label>
+    <select id="tipoRepresentante">
+        <option value="Interno">Interno</option>
+        <option value="Externo">Externo</option>
+    </select>
+
+    <label>% Comissão Representante:</label>
+    <input type="number" id="porcRep" placeholder="Ex: 2.5" step="0.1">
+</div>
+
+    <label>Cliente (ResultPro):</label>
+    <input type="text" id="cliente" list="listaClientesDatalist" placeholder="Digite o nome do cliente" autocomplete="off">
+    <datalist id="listaClientesDatalist"></datalist>
+
+    <label>Valor da Nota/Produto (R$):</label>
+    <input type="number" id="valorNota" step="0.01">
+
+    <label>Valor Por Fora (R$):</label>
+    <input type="number" id="valorFora" step="0.01" value="0.00">
+
+    <label>Divisão:</label>
+    <select id="divisao">
+        <option value="100% - SEM DIVISÃO">100% - SEM DIVISÃO</option>
+        <option value="1/5 - DIVISÃO A">1/5 - DIVISÃO A</option>
+        <option value="1/3 - DIVISÃO B">1/3 - DIVISÃO B</option>
+        <option value="1/2 - DIVISÃO C">1/2 - DIVISÃO C</option>
+        <option value="1/4 - DIVISÃO D">1/4 - DIVISÃO D</option>
+    </select>
+
+    <label>% Comissão Vendedora:</label>
+    <input type="number" id="porcVend" placeholder="Ex: 5.0" step="0.1">
+
+    <button id="btnRegistrar" onclick="salvarComissao()">✅ Registrar Venda</button>
+    <button id="btnImprimir" onclick="window.print()" style="background: #17a2b8; color: white;">🖨️ Imprimir / Salvar PDF</button>
+    <button class="btn-clear" onclick="limparTelaComissoes()">🧹 Limpar Tudo</button>
+    
+    <div id="status"></div>
+
+    <!-- HISTÓRICO DE SESSÃO -->
+    <div class="history-log" style="margin-top: 20px;">
+        <strong>📜 Vendas registradas nesta sessão:</strong>
+        <div id="listaHistoricoComissoes"></div>
+    </div>
+</div>
+
+<div id="telaFornecedores" class="container hidden">
+    <h2>Cadastro de Fornecedores</h2>
+    <input type="text" id="cnpjInput" placeholder="Digite o CNPJ" maxlength="18">
+    <button id="btnConsultar" onclick="consultarFornecedor()">🔍 Consultar CNPJ</button>
+    <button class="btn-clear" onclick="limparTelaFornecedores()">🧹 Limpar</button>
+    
+    <div id="statusFornecedor"></div>
+
+    <div id="resultadoFornecedor" class="result-box" style="display:none;">
+        <p><strong>Razão Social:</strong> <span id="resRazao"></span></p>
+        <p><strong>CNPJ:</strong> <span id="resCnpj"></span></p>
+        <p><strong>Cidade/UF:</strong> <span id="resCidade"></span></p>
+        
+        <label>Telefone (Editável):</label>
+        <input type="text" id="resTel" class="edit-field" placeholder="(XX) XXXXX-XXXX" maxlength="15">
+        
+        <label>Cód. Município (IBGE):</label>
+        <input type="text" id="resCodMun" class="edit-field" placeholder="Puxando ou digite aqui...">
+
+        <label>Email:</label>
+        <input type="text" id="resEmail" class="edit-field">
+
+        <label>Inscrição Estadual:</label>
+        <input type="text" id="resIE" class="edit-field" placeholder="Digite a IE">
+        
+        <label>Divisão de Fatura:</label>
+        <select id="resDivisao" class="edit-field">
+            <option value="100% - SEM DIVISÃO">1° 100% - SEM DIVISÃO</option>
+            <option value="1/5 - DIVISÃO A">2° 1/5 - DIVISÃO A</option>
+            <option value="1/3 - DIVISÃO B">3° 1/3 - DIVISÃO B</option>
+            <option value="1/2 - DIVISÃO C">4° 1/2 - DIVISÃO C</option>
+            <option value="1/4 - DIVISÃO D">5° 1/4 - DIVISÃO D</option>
+        </select>
+
+        <label>Observação:</label>
+        <textarea id="resObs" class="edit-field" placeholder="Digite observações aqui..."></textarea>
+
+        <button id="btnSalvarFornecedor" onclick="salvarFornecedorNaPlanilha()" style="background: #28a745; margin-top: 15px;">✅ Confirmar e Salvar</button>
+        
+        <!-- HISTÓRICO DE SESSÃO -->
+        <div class="history-log">
+            <strong>📜 Cadastrados nesta sessão:</strong>
+            <div id="listaHistorico"></div>
+        </div>
+    </div>
+</div>
+
+<div id="telaPlanilhas" class="container hidden" style="max-width: 90%;">
+    <h2>Central de Planilhas</h2>
+    
+    <!-- MENU DE CARDS -->
+    <div id="planilhasCards" class="cards-grid">
+        <div class="card" onclick="abrirPlanilha('banco')">
+            <i class="fas fa-database"></i>
+            <h3>Banco de Fornecedores e Clientes</h3>
+        </div>
+        <div class="card" onclick="abrirPlanilha('logistica')">
+            <i class="fas fa-shipping-fast"></i>
+            <h3>LOGISTICA</h3>
+        </div>
+        <div class="card" onclick="abrirPlanilha('gerencial')">
+            <i class="fas fa-chart-bar"></i>
+            <h3>PLANILHA GERENCIAL</h3>
+        </div>
+    </div>
+
+    <!-- VISUALIZADOR DA PLANILHA -->
+    <div id="planilhaViewer" class="sheet-viewer">
+        <div class="sheet-controls">
+            <button onclick="fecharPlanilha()" class="btn-clear" style="width: auto;"><i class="fas fa-arrow-left"></i> Voltar</button>
+            <button onclick="abrirNovaAba()" style="width: auto; background: #28a745;"><i class="fas fa-external-link-alt"></i> Abrir no Navegador</button>
+        </div>
+        <iframe id="framePlanilha" src="about:blank" width="100%" height="700px" style="border:none; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);"></iframe>
+    </div>
+</div>
+
+<script src="app.js"></script>
+<div id="modalLogin" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center;">
+    <div class="container" style="max-width: 350px; margin-bottom: 0;">
+        <h2 id="tituloLogin">Acesso Miss Rôse</h2>
+        
+        <div id="camposLogin">
+            <label>Vendedora:</label>
+            <select id="selectUser">
+                <option value="Renata">Renata</option>
+                <option value="Carol">Carol</option>
+                <option value="Vendedora 1">Vendedora 1</option>
+            </select>
+
+            <label>Senha:</label>
+            <div style="position: relative;">
+                <input type="password" id="senhaInput" placeholder="Sua senha">
+                <i class="fas fa-eye" id="toggleSenha" onclick="mostrarSenha()" style="position: absolute; right: 10px; top: 12px; cursor: pointer; color: #888;"></i>
+            </div>
+            
+            <button onclick="efetuarLogin()">Entrar</button>
+        </div>
+
+        <div id="areaLogado" class="hidden">
+            <p style="text-align: center; font-weight: bold;">Logado como: <span id="nomeLogado"></span></p>
+            <button class="btn-clear" onclick="efetuarLogout()"><i class="fas fa-sign-out-alt"></i> Sair do Sistema</button>
+        </div>
+        
+        <button class="btn-clear" onclick="fecharModalLogin()" style="background: none; color: #888; border: none; font-size: 12px;">Fechar</button>
+    </div>
+</div>
+</body>
+</html>
