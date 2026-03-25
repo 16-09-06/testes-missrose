@@ -19,6 +19,34 @@ let totalComissaoSessao = 0;
 let chartMensal = null;
 let chartVendedoras = null;
 
+// Configuração Global do Toast (Notificações não-intrusivas)
+const Toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    didOpen: (toast) => {
+        toast.addEventListener('mouseenter', Swal.stopTimer)
+        toast.addEventListener('mouseleave', Swal.resumeTimer)
+    }
+});
+
+// Função utilitária Debounce: Otimiza performance segurando a execução de eventos repetitivos
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+// Função utilitária para converter "R$ 1.500,50" em número real (1500.50) para cálculos
+function unmaskValor(valStr) {
+    if(!valStr) return 0;
+    return parseFloat(String(valStr).replace(/R\$\s?/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+}
+
 // Função para criar o Hash da Senha (SHA-256)
 async function hashPassword(message) {
     const msgUint8 = new TextEncoder().encode(message);
@@ -51,7 +79,7 @@ function setAndLockVendedora(user) {
 }
 
 async function realizarLogin() {
-    const user = document.getElementById('userLogin').value.trim();
+    const user = document.getElementById('userLogin').value.trim().toUpperCase();
     const senhaRaw = document.getElementById('senhaLogin').value;
     
     const senhaHash = await hashPassword(senhaRaw);
@@ -91,11 +119,14 @@ if (usuarioLogado) {
 }
 
 async function cadastrarNovoVendedor() {
-    const nome = document.getElementById('novoNome').value.trim();
+    const nome = document.getElementById('novoNome').value.trim().toUpperCase();
     const senhaRaw = document.getElementById('novaSenha').value;
+    const btn = document.querySelector('#formCadastrar button');
 
     if (!nome || !senhaRaw) return Swal.fire('Atenção', 'Por favor, preencha nome e senha.', 'warning');
     
+    btn.disabled = true;
+    btn.innerHTML = '💾 Salvando...';
     const senhaHash = await hashPassword(senhaRaw);
 
     try {
@@ -106,11 +137,27 @@ async function cadastrarNovoVendedor() {
         const texto = await response.text();
         
         if (texto === "Sucesso") {
-            Swal.fire('Sucesso!', "✅ USUARIO " + nome + " cadastrado com sucesso!", 'success');
+            Swal.fire({
+                icon: 'success',
+                title: 'Cadastro Realizado!',
+                text: `O usuário ${nome} foi criado. Agora você já pode entrar no sistema.`,
+                timer: 3000,
+                showConfirmButton: false
+            });
+
+            document.getElementById('novoNome').value = '';
+            document.getElementById('novaSenha').value = '';
             alternarAbaAuth('entrar');
+            document.getElementById('userLogin').value = nome;
+            document.getElementById('senhaLogin').focus();
+        } else {
+            Swal.fire('Erro', 'Não foi possível realizar o cadastro. O usuário pode já existir.', 'error');
         }
     } catch (e) {
         Swal.fire('Erro', 'Erro ao conectar com a planilha de acesso.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '💾 Salvar Cadastro';
     }
 }
 
@@ -161,9 +208,9 @@ function fecharModalLogin() {
     document.getElementById('modalLogin').classList.add('hidden');
 }
 
-function mostrarSenha() {
-    const s = document.getElementById('senhaInput');
-    const i = document.getElementById('toggleSenha');
+function mostrarSenha(inputId = 'senhaInput', iconId = 'toggleSenha') {
+    const s = document.getElementById(inputId);
+    const i = document.getElementById(iconId);
     if (s.type === "password") {
         s.type = "text";
         i.classList.replace('fa-eye', 'fa-eye-slash');
@@ -293,13 +340,15 @@ function mudarCorEquipe() {
     h.style.background = grad; b.style.backgroundColor = cor; c.style.borderTopColor = cor;
 }
 
+const calcularComissaoDebounced = debounce(calcularComissaoRealTime, 300);
+
 document.querySelectorAll('#valorNota, #valorFora, #porcVend, #porcRep').forEach(el => {
-    el.addEventListener('input', calcularComissaoRealTime);
+    el.addEventListener('input', calcularComissaoDebounced);
 });
 
 function calcularComissaoRealTime() {
-    const valorNota = parseFloat(document.getElementById('valorNota').value) || 0;
-    const valorFora = parseFloat(document.getElementById('valorFora').value) || 0;
+    const valorNota = unmaskValor(document.getElementById('valorNota').value);
+    const valorFora = unmaskValor(document.getElementById('valorFora').value);
     const porcVend = parseFloat(document.getElementById('porcVend').value) || 0;
     const porcRep = parseFloat(document.getElementById('porcRep').value) || 0;
     const tipoVenda = document.getElementById('tipoVenda').value;
@@ -318,7 +367,18 @@ function calcularComissaoRealTime() {
     }
 }
 
-function limparTelaComissoes() { location.reload(); }
+function limparTelaComissoes() {
+    Swal.fire({
+        title: 'Deseja limpar tudo?',
+        text: "Todos os dados da venda atual serão perdidos.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d81b60',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sim, limpar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => { if (result.isConfirmed) location.reload(); });
+}
 
 async function salvarComissao() {
     const btn = document.getElementById('btnRegistrar');
@@ -341,8 +401,8 @@ async function salvarComissao() {
     });
 
     // Otimização de DOM: Buscando valores apenas uma vez
-    const valorNota = parseFloat(document.getElementById('valorNota').value) || 0;
-    const valorFora = parseFloat(document.getElementById('valorFora').value) || 0;
+    const valorNota = unmaskValor(document.getElementById('valorNota').value);
+    const valorFora = unmaskValor(document.getElementById('valorFora').value);
     const porcVend = parseFloat(document.getElementById('porcVend').value) || 0;
     const totalNfVal = valorNota + valorFora;
     const nomeCliente = document.getElementById('cliente').value || "CLIENTE NÃO INFORMADO";
@@ -387,7 +447,7 @@ async function salvarComissao() {
         // Como usamos 'no-cors', a resposta é "opaca" e não dá pra ler o retorno JSON do Google.
         // Portanto, assumimos sucesso no envio!
         exibirStatus(statusDiv, "✅ Venda registrada com sucesso!", "#d4edda", "#155724");
-        Swal.fire('Sucesso!', 'Venda registrada com sucesso!', 'success');
+        Toast.fire({ icon: 'success', title: 'Venda registrada com sucesso!' });
         
         // Atualiza Dashboard na sessão
         const valorComissao = totalNfVal * (porcVend / 100);
@@ -406,12 +466,20 @@ async function salvarComissao() {
         // Adiciona ao Histórico
         const hora = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const nomeCliAbrev = nomeCliente.length > 15 ? nomeCliente.substring(0, 15) + "..." : nomeCliente;
-        const item = `<div class="history-item"><span>${nomeCliAbrev} - ${totalNfVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span> <span>${hora} ✅</span></div>`;
+        const payloadStr = encodeURIComponent(JSON.stringify(payload));
+        const item = `
+        <div class="history-item" style="align-items: center;">
+            <span>${nomeCliAbrev} - ${totalNfVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span> 
+            <div>
+                <span>${hora} ✅</span>
+                <button onclick="editarVendaSessao('${payloadStr}')" style="width: auto; padding: 4px 8px; margin: 0 0 0 10px; font-size: 12px; background: #ffc107; color: #333; border-radius: 4px;" title="Editar esta venda"><i class="fas fa-edit"></i></button>
+            </div>
+        </div>`;
         document.getElementById('listaHistoricoComissoes').innerHTML += item;
 
         // Limpa campos de valores para a próxima venda!
         document.getElementById('valorNota').value = "";
-        document.getElementById('valorFora').value = "0.00";
+        document.getElementById('valorFora').value = "";
         document.getElementById('cliente').value = "";
         calcularComissaoRealTime(); // Zera o preview na tela
 
@@ -422,6 +490,48 @@ async function salvarComissao() {
     } finally {
         btn.disabled = false;
     }
+}
+
+function editarVendaSessao(payloadStr) {
+    const data = JSON.parse(decodeURIComponent(payloadStr));
+    
+    Swal.fire({
+        title: 'Corrigir Lançamento?',
+        text: "Os dados voltarão para o formulário. Lembre-se de avisar a gerência para ignorar o registro anterior incorreto na planilha.",
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonColor: '#ffc107',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sim, carregar dados',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('empresaSelecionada').value = data.empresa || "MISS RÔSE";
+            document.getElementById('vendedora').value = data.vendedora || "";
+            
+            if (data.representante && data.representante !== "VENDA DIRETA") {
+                document.getElementById('tipoVenda').value = 'representante';
+                toggleRepresentante();
+                document.getElementById('nomeRepresentante').value = data.representante;
+            } else {
+                document.getElementById('tipoVenda').value = 'direta';
+                toggleRepresentante();
+            }
+            
+            document.getElementById('cliente').value = data.razaoSocial || "";
+            document.getElementById('divisao').value = data.divisao || "100% - SEM DIVISÃO";
+            document.getElementById('porcVend').value = data.porcentagemComissao || "";
+            
+            const valorNota = parseFloat(data.totalNf) || 0;
+            const valorFora = (parseFloat(data.totalPedido) || 0) - valorNota;
+            
+            document.getElementById('valorNota').value = valorNota.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            document.getElementById('valorFora').value = valorFora.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+            
+            calcularComissaoRealTime();
+            window.scrollTo({ top: 0, behavior: 'smooth' }); // Rola a tela para o topo
+        }
+    });
 }
 
 async function consultarFornecedor() {
@@ -490,15 +600,28 @@ async function consultarFornecedor() {
 }
 
 function limparTelaFornecedores() {
-    document.getElementById('cnpjInput').value = "";
-    document.getElementById('resultadoFornecedor').style.display = 'none';
-    document.getElementById('statusFornecedor').style.display = 'none';
-    document.getElementById('resIE').value = "";
-    document.getElementById('resTel').value = "";
-    document.getElementById('resObs').value = "";
-    document.getElementById('resEmail').value = "";
-    document.getElementById('resCodMun').value = "";
-    document.getElementById('resDivisao').value = "100% - SEM DIVISÃO";
+    Swal.fire({
+        title: 'Limpar Cadastro?',
+        text: "Você perderá os dados não salvos.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d81b60',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Sim, limpar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('cnpjInput').value = "";
+            document.getElementById('resultadoFornecedor').style.display = 'none';
+            document.getElementById('statusFornecedor').style.display = 'none';
+            document.getElementById('resIE').value = "";
+            document.getElementById('resTel').value = "";
+            document.getElementById('resObs').value = "";
+            document.getElementById('resEmail').value = "";
+            document.getElementById('resCodMun').value = "";
+            document.getElementById('resDivisao').value = "100% - SEM DIVISÃO";
+        }
+    });
 }
 
 async function salvarFornecedorNaPlanilha() {
@@ -550,7 +673,7 @@ async function salvarFornecedorNaPlanilha() {
             Swal.fire('Atenção', 'Este CNPJ já está cadastrado!', 'warning');
         } else {
             exibirStatus(statusDiv, "✅ Gravado com sucesso!", "#d4edda", "#155724");
-            Swal.fire('Sucesso!', 'Fornecedor cadastrado com sucesso!', 'success');
+            Toast.fire({ icon: 'success', title: 'Fornecedor cadastrado com sucesso!' });
             
             const hora = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const item = `<div class="history-item"><span>${payload.razao_social.substring(0, 20)}...</span> <span>${hora} ✅</span></div>`;
@@ -640,6 +763,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const resTel = document.getElementById('resTel');
     if (resTel) IMask(resTel, { mask: '(00) 00000-0000' });
 
+    // Máscaras de Dinheiro para a Tela de Comissões
+    const maskDinheiro = { mask: 'R$ num', blocks: { num: { mask: Number, scale: 2, thousandsSeparator: '.', padFractionalZeros: true, normalizeZeros: true, radix: ',' } } };
+    const inNota = document.getElementById('valorNota');
+    if(inNota) IMask(inNota, maskDinheiro);
+    const inFora = document.getElementById('valorFora');
+    if(inFora) IMask(inFora, maskDinheiro);
+
     // Aplica o Dark Mode caso o usuário já tenha ativado antes
     if(localStorage.getItem('darkMode') === 'true') {
         document.body.classList.add('dark-mode');
@@ -726,8 +856,8 @@ async function carregarDashboardReal() {
         const selectVend = document.getElementById('filtroVendedoraDash');
         
         // Defina aqui as integrantes de cada equipe para a trava funcionar:
-        const equipeRenata = ['RENATA', 'VENDEDORA 1', 'VENDEDORA 2']; 
-        const equipeCarol  = ['CAROL', 'VENDEDORA 3', 'VENDEDORA 4', 'VENDEDORA 5'];
+        const equipeRenata = ['RENATA', 'HOZANA', 'ISRAEL', 'ROSANGELA', 'SARA', 'VINICIUS']; 
+        const equipeCarol  = ['CAROL', 'ALICE', 'CHARLENE', 'HEMILLY', 'MICHELLE'];
 
         if (isAdmin && selectVend) {
             selectVend.style.display = 'inline-block';
@@ -758,6 +888,17 @@ async function carregarDashboardReal() {
         let comissaoPendente = 0;
         let comissaoLiquida = 0;
         let clientesMemoria = new Set(); // Memória para o Autocompletar
+        
+        // Variáveis para Comparação de Mês Anterior
+        const mesesRef = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+        let idxMes = mesesRef.indexOf(mesAtual);
+        let mesPrevStr = idxMes <= 0 ? 'DEZEMBRO' : mesesRef[idxMes - 1];
+        let anoPrevStr = idxMes <= 0 ? (parseInt(anoAtual) - 1).toString() : anoAtual;
+        
+        let somaTotalVendasPrev = 0;
+        let countPedidosPrev = 0;
+        let comissaoPendentePrev = 0;
+        let comissaoLiquidaPrev = 0;
 
         for (let row of data.table.rows) {
             if(!row.c) continue;
@@ -780,6 +921,7 @@ async function carregarDashboardReal() {
 
             // Aplica Lógica de Filtro Avançado
             let isDateValid = (valInicio && valFim && rowDate) ? (rowDate >= valInicio && rowDate <= valFim) : (rowMes === mesAtual && rowAno === anoAtual);
+            let isDateValidPrev = (valInicio && valFim && rowDate) ? false : (rowMes === mesPrevStr && rowAno === anoPrevStr); // Não calcula % em datas customizadas
             
             let isVendaValida = false;
             if (isSuperAdmin) {
@@ -813,6 +955,17 @@ async function carregarDashboardReal() {
                 if (isLiquido) comissaoLiquida += valComissao;
                 else comissaoPendente += valComissao; // Padrão é pendente
             }
+            
+            // Acumula os dados se a venda for do mês ANTERIOR
+            if (isDateValidPrev && isVendaValida) {
+                let rawTotal = row.c[colTotal] ? row.c[colTotal].v : 0;
+                somaTotalVendasPrev += (typeof rawTotal === 'number' ? rawTotal : parseFloat(String(rawTotal).replace(',', '.')) || 0);
+                countPedidosPrev++;
+                let rawCom = row.c[colComissao] ? row.c[colComissao].v : 0;
+                let valComPrev = typeof rawCom === 'number' ? rawCom : parseFloat(String(rawCom).replace(',', '.')) || 0;
+                let isLiquido = row.c.some(c => c && typeof c.v === 'string' && c.v.toUpperCase() === 'LIQUIDO');
+                if (isLiquido) comissaoLiquidaPrev += valComPrev; else comissaoPendentePrev += valComPrev;
+            }
         }
 
         // Atualiza os valores na tela conforme o mês selecionado no filtro
@@ -823,6 +976,20 @@ async function carregarDashboardReal() {
         document.getElementById('kpiPedidos').innerText = countPedidos;
         document.getElementById('kpiPendente').innerText = comissaoPendente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         document.getElementById('kpiLiquido').innerText = comissaoLiquida.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        // Lógica para desenhar as setas de crescimento (Se houver crescimento de mês atual x mês anterior)
+        function getBadgeCrescimento(atual, prev) {
+            if (valInicio && valFim) return ""; // Esconde setinhas se o filtro for por dias específicos
+            if (prev === 0) return atual > 0 ? `<span style="color:#28a745;">(🔺 100%)</span>` : ``;
+            let diff = ((atual - prev) / prev) * 100;
+            if (diff > 0) return `<span style="color:#28a745;">(🔺 +${diff.toFixed(1)}%)</span>`;
+            if (diff < 0) return `<span style="color:#dc3545;">(🔻 ${diff.toFixed(1)}%)</span>`;
+            return `<span style="color:#888;">(⏸ 0%)</span>`;
+        }
+        if(document.getElementById('kpiFaturamentoPrev')) document.getElementById('kpiFaturamentoPrev').innerHTML = getBadgeCrescimento(somaTotalVendas, somaTotalVendasPrev);
+        if(document.getElementById('kpiPedidosPrev')) document.getElementById('kpiPedidosPrev').innerHTML = getBadgeCrescimento(countPedidos, countPedidosPrev);
+        if(document.getElementById('kpiPendentePrev')) document.getElementById('kpiPendentePrev').innerHTML = getBadgeCrescimento(comissaoPendente, comissaoPendentePrev);
+        if(document.getElementById('kpiLiquidoPrev')) document.getElementById('kpiLiquidoPrev').innerHTML = getBadgeCrescimento(comissaoLiquida, comissaoLiquidaPrev);
 
         // Popula a "listinha" do Autocomplete no campo Cliente da tela de Comissões
         const datalistCli = document.getElementById('listaClientesDatalist');
@@ -855,8 +1022,8 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
     const isSuperAdmin = superAdmins.includes(userLogadoUpper);
     const isAdmin = isSuperAdmin || ['RENATA', 'CAROL'].includes(userLogadoUpper);
     
-    const equipeRenata = ['RENATA', 'VENDEDORA 1', 'VENDEDORA 2']; 
-    const equipeCarol  = ['CAROL', 'VENDEDORA 3', 'VENDEDORA 4', 'VENDEDORA 5'];
+    const equipeRenata = ['RENATA', 'HOZANA', 'ISRAEL', 'ROSANGELA', 'SARA', 'VINICIUS']; 
+    const equipeCarol  = ['CAROL', 'ALICE', 'CHARLENE', 'HEMILLY', 'MICHELLE'];
     
     const isDark = document.body.classList.contains('dark-mode');
 
@@ -1055,38 +1222,6 @@ function fecharModalRecibo() {
     document.getElementById('modalRecibo').style.display = 'none';
 }
 
-async function baixarPDFReciboVisivel() {
-    Swal.fire({
-        title: 'Gerando PDF...',
-        html: 'Aguarde um instante...',
-        allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
-    });
-
-    const element = document.getElementById('templateReciboPDF');
-    const vendedora = document.getElementById('reciboVendedora').innerText;
-
-    const opt = {
-        margin: [10, 10],
-        filename: `Recibo_${vendedora}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.pdf`,
-        image: { type: 'jpeg', quality: 1.0 },
-        html2canvas: { 
-            scale: 2, 
-            useCORS: true,
-            backgroundColor: '#ffffff'
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-
-    try {
-        await html2pdf().set(opt).from(element).save();
-        Swal.fire('Sucesso!', 'Recibo baixado com sucesso.', 'success');
-    } catch (error) {
-        console.error("Erro ao gerar PDF:", error);
-        Swal.fire('Erro!', 'Falha na geração do PDF.', 'error');
-    }
-}
-
 function imprimirReciboNativo() {
     const conteudo = document.getElementById('templateReciboPDF').innerHTML;
     const telaImpressao = window.open('', '', 'width=900,height=700');
@@ -1113,4 +1248,29 @@ function imprimirReciboNativo() {
         telaImpressao.print();
         telaImpressao.close();
     }, 500);
+}
+
+async function compartilharReciboWhatsApp() {
+    const vendedora = document.getElementById('reciboVendedora').innerText;
+    const mes = document.getElementById('reciboMes').innerText;
+    const total = document.getElementById('reciboTotal').innerText;
+
+    const textoRecibo = `*Resumo de Vendas - Miss Rôse*\n` +
+                        `👤 Vendedora: ${vendedora}\n` +
+                        `📅 Período: ${mes}\n` +
+                        `💰 Total de Comissão: ${total}\n\n` +
+                        `Gerado pelo App Miss Rôse`;
+
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Recibo Miss Rôse',
+                text: textoRecibo,
+            });
+        } catch (err) {
+            console.log('Compartilhamento cancelado ou falhou', err);
+        }
+    } else {
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(textoRecibo)}`);
+    }
 }

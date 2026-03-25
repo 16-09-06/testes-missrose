@@ -102,3 +102,15 @@ body.dark-mode .logo-area img { background: #333; }
     .container { width: 95%; padding: 20px; box-sizing: border-box; }
     .result-box { overflow-x: auto; } /* Impede que tabelas de relatórios travem a tela */
 }
+
+/* Força cores de impressão para o PDF independente do modo escuro */
+#templateReciboPDF, #templateReciboPDF * {
+    color: black !important;
+    background-color: white !important;
+    -webkit-print-color-adjust: exact;
+}
+
+#templateReciboPDF table th {
+    background-color: #d81b60 !important;
+    color: white !important;
+}
