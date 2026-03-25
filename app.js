@@ -59,16 +59,31 @@ function setAndLockVendedora(user) {
     const vendedoraSelect = document.getElementById('vendedora');
     if (!vendedoraSelect) return;
 
-    const admins = ['KAYK', 'JHONATA', 'DEBORA', 'FELIPE', 'RENATA', 'CAROL'];
-    const isAdmin = admins.some(adm => adm.toUpperCase() === user.toUpperCase());
-    let optionExists = Array.from(vendedoraSelect.options).some(opt => opt.value === user);
+    const userUpper = user.toUpperCase();
+    const superAdmins = ['KAYK', 'JHONATA', 'DEBORA', 'FELIPE'];
+    const isSuperAdmin = superAdmins.includes(userUpper);
+    const isAdmin = isSuperAdmin || ['RENATA', 'CAROL'].includes(userUpper);
 
-    if (!optionExists) {
-        const newOption = new Option(user, user);
-        vendedoraSelect.add(newOption);
+    const equipeRenata = ['RENATA', 'HOZANA', 'ISRAEL', 'ROSANGELA', 'SARA', 'VINICIUS'];
+    const equipeCarol  = ['CAROL', 'ALICE', 'CHARLENE', 'HEMILLY', 'MICHELLE'];
+
+    // Limpa as opções antigas e preenche com a equipe correta
+    vendedoraSelect.innerHTML = '<option value="">Selecione...</option>';
+    let vendedorasPermitidas = [];
+    
+    if (isSuperAdmin) {
+        vendedorasPermitidas = [...new Set([...equipeRenata, ...equipeCarol, userUpper])].sort();
+    } else if (userUpper === 'RENATA') {
+        vendedorasPermitidas = equipeRenata;
+    } else if (userUpper === 'CAROL') {
+        vendedorasPermitidas = equipeCarol;
+    } else {
+        vendedorasPermitidas = [userUpper];
     }
 
-    vendedoraSelect.value = user;
+    vendedorasPermitidas.forEach(v => vendedoraSelect.add(new Option(v, v)));
+
+    vendedoraSelect.value = userUpper;
     vendedoraSelect.disabled = !isAdmin;
 
     // Aciona a busca do Dashboard real após identificar a vendedora
@@ -752,6 +767,28 @@ function toggleDarkMode() {
     if (!document.getElementById('telaDashboard').classList.contains('hidden')) carregarDashboardReal();
 }
 
+function mostrarPopupAtualizacao(registration) {
+    Swal.fire({
+        title: 'Nova Versão Disponível!',
+        html: 'Uma atualização foi encontrada. Recomendamos atualizar agora para ter os recursos mais recentes.',
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="fas fa-sync-alt"></i> Atualizar Agora',
+        cancelButtonText: 'Depois',
+        allowOutsideClick: false,
+        allowEscapeKey: false
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Pede para o novo Service Worker assumir o controle
+            if (registration.waiting) {
+                registration.waiting.postMessage({ action: 'skipWaiting' });
+            }
+        }
+    });
+}
+
 // --- INICIALIZAÇÕES ---
 document.addEventListener("DOMContentLoaded", () => {
     mudarCorEquipe();
@@ -791,9 +828,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Registra o Service Worker (Aplicativo de Celular / PWA)
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').then(() => {
-            console.log('App instalado com sucesso!');
-        }).catch(err => console.log('Erro no PWA:', err));
+        navigator.serviceWorker.register('sw.js').then(registration => {
+            console.log('Service Worker registrado com sucesso!');
+
+            registration.onupdatefound = () => {
+                const installingWorker = registration.installing;
+                if (installingWorker == null) {
+                    return;
+                }
+                installingWorker.onstatechange = () => {
+                    if (installingWorker.state === 'installed') {
+                        if (navigator.serviceWorker.controller) {
+                            // Neste ponto, o novo SW está instalado e esperando.
+                            // É o momento perfeito para notificar o usuário.
+                            console.log('Nova versão do app disponível! Por favor, atualize.');
+                            mostrarPopupAtualizacao(registration);
+                        } else {
+                            // Conteúdo está todo em cache. App pronto para uso offline.
+                            console.log('Conteúdo em cache para uso offline.');
+                        }
+                    }
+                };
+            };
+        }).catch(error => {
+            console.error('Erro no registro do Service Worker:', error);
+        });
+
+        // Recarrega a página uma vez que o novo SW tomou o controle
+        let refreshing;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            window.location.reload();
+            refreshing = true;
+        });
     }
 });
 

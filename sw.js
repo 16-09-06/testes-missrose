@@ -1,4 +1,4 @@
-const CACHE_NAME = 'missrose-v2';
+const CACHE_NAME = 'missrose-v4';
 const urlsToCache = [
     './',
     './index.html',
@@ -48,4 +48,11 @@ self.addEventListener('fetch', (e) => {
             return response || fetch(e.request);
         })
     );
+});
+
+// Ouve mensagens da página (app.js) para pular a espera e ativar a nova versão
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.action === 'skipWaiting') {
+        self.skipWaiting();
+    }
 });
