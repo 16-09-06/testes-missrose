@@ -9,6 +9,9 @@ const URL_LOGIN_DB = "https://script.google.com/macros/s/AKfycbyffqQQUSRWVVpyQyK
 // 👇 COLOQUE AQUI O ID DA SUA PLANILHA ONDE AS COMISSÕES SÃO SALVAS 👇
 const ID_PLANILHA_COMISSOES = "17PYbOV8CuEwghbaDiUmJXvc1mCT7tZ55iKvkQFzTeXc";
 
+// Controle de Versão do App (Mude sempre que enviar atualização)
+const APP_VERSION = "1.0.7";
+
 let usuarioLogado = localStorage.getItem('usuarioLogado');
 
 let dadosEmpresa = {}; 
@@ -264,20 +267,24 @@ function alternarTela(tela) {
     const telaCom = document.getElementById('telaComissoes');
     const telaFor = document.getElementById('telaFornecedores');
     const telaPlan = document.getElementById('telaPlanilhas');
+    const telaConfig = document.getElementById('telaConfig');
     const navDash = document.getElementById('navDashboard');
     const navCom = document.getElementById('navComissoes');
     const navFor = document.getElementById('navFornecedores');
     const navPlan = document.getElementById('navPlanilhas');
+    const navConfig = document.getElementById('navConfig');
 
     if (telaDash) telaDash.classList.add('hidden');
     telaCom.classList.add('hidden');
     telaFor.classList.add('hidden');
     telaPlan.classList.add('hidden');
+    if (telaConfig) telaConfig.classList.add('hidden');
     
     if (navDash) navDash.classList.remove('active');
     navCom.classList.remove('active');
     navFor.classList.remove('active');
     navPlan.classList.remove('active');
+    if (navConfig) navConfig.classList.remove('active');
 
     if (tela === 'dashboard') {
         if (telaDash) telaDash.classList.remove('hidden');
@@ -294,6 +301,9 @@ function alternarTela(tela) {
         telaFor.classList.remove('hidden'); navFor.classList.add('active');
     } else if (tela === 'planilhas') {
         telaPlan.classList.remove('hidden'); navPlan.classList.add('active');
+    } else if (tela === 'config') {
+        if (telaConfig) telaConfig.classList.remove('hidden');
+        if (navConfig) navConfig.classList.add('active');
     }
 }
 
@@ -789,6 +799,35 @@ function mostrarPopupAtualizacao(registration) {
     });
 }
 
+async function verificarAtualizacaoManual() {
+    const btn = document.getElementById('btnCheckUpdate');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verificando no servidor...'; }
+
+    if ('serviceWorker' in navigator) {
+        try {
+            const registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+                // Força o SW a checar o arquivo sw.js no servidor
+                await registration.update();
+                
+                // Damos um pequeno delay para a checagem acontecer e o evento onupdatefound disparar
+                setTimeout(() => {
+                    if (!registration.installing) {
+                        // Se não encontrou instalador novo após o update(), significa que já está na última versão
+                        Toast.fire({ icon: 'success', title: 'Seu aplicativo já está na versão mais recente!' });
+                    }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Verificar Atualizações'; }
+                }, 1500);
+            }
+        } catch (e) {
+            Toast.fire({ icon: 'error', title: 'Erro ao verificar atualizações.' });
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Verificar Atualizações'; }
+        }
+    } else {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Verificar Atualizações'; }
+    }
+}
+
 // --- INICIALIZAÇÕES ---
 document.addEventListener("DOMContentLoaded", () => {
     mudarCorEquipe();
@@ -816,6 +855,10 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.style.color = '#ffd700';
         }
     }
+
+    // Preenche a versão atual na tela de Configurações
+    const versionDisplay = document.getElementById('appVersionDisplay');
+    if (versionDisplay) versionDisplay.innerText = "Versão " + APP_VERSION;
 
     // Define o mês atual no filtro do Dashboard ao abrir a página
     const mesAtualStr = new Date().toLocaleString('pt-BR', { month: 'long' }).toUpperCase();

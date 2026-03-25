@@ -115,6 +115,7 @@
         <a id="navComissoes" class="active" onclick="alternarTela('comissoes')"><i class="fas fa-users"></i> Comissões</a>
         <a id="navFornecedores" onclick="alternarTela('fornecedores')"><i class="fas fa-truck"></i> Fornecedores e Clientes</a>
         <a id="navPlanilhas" onclick="alternarTela('planilhas')"><i class="fas fa-table"></i> PLANILHAS </a>
+        <a id="navConfig" onclick="alternarTela('config')"><i class="fas fa-cog"></i> Configurações</a>
     </nav>
     <div style="display: flex; align-items: center; gap: 15px;">
         <i id="btnDarkMode" class="fas fa-moon" onclick="toggleDarkMode()" style="color: white; cursor: pointer; font-size: 20px;" title="Modo Escuro"></i>
@@ -125,7 +126,7 @@
 </header>
 
 <div id="telaDashboard" class="container hidden">
-    <h2>Visão Geral de Desempenho <span style="background: #28a745; color: white; padding: 5px 10px; border-radius: 8px; font-size: 16px;">🚀 ATUALIZADO!</span></h2>
+    <h2>Visão Geral de Desempenho</h2>
 
     <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 20px; gap: 10px; flex-wrap: wrap;">
         <label style="margin: 0; font-size: 14px;">Mês/Ano:</label>
@@ -422,6 +423,20 @@
             <button onclick="abrirNovaAba()" style="width: auto; background: #28a745;"><i class="fas fa-external-link-alt"></i> Abrir no Navegador</button>
         </div>
         <iframe id="framePlanilha" src="about:blank" width="100%" height="700px" style="border:none; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);"></iframe>
+    </div>
+</div>
+
+<div id="telaConfig" class="container hidden">
+    <h2>Configurações do Sistema</h2>
+    
+    <div class="result-box" style="display: flex; flex-direction: column; align-items: center; text-align: center; margin-top: 10px;">
+        <i class="fas fa-mobile-alt" style="font-size: 40px; color: var(--primary); margin-bottom: 15px;"></i>
+        <h3 style="margin: 0 0 5px 0; color: var(--primary);">Versão do Aplicativo</h3>
+        <p style="margin: 0 0 15px 0; font-size: 14px;">Versão atual instalada: <strong id="appVersionDisplay"></strong></p>
+        
+        <button id="btnCheckUpdate" onclick="verificarAtualizacaoManual()" style="width: auto; padding: 10px 25px; font-size: 14px; border-radius: 20px;">
+            <i class="fas fa-sync-alt"></i> Verificar Atualizações
+        </button>
     </div>
 </div>
 

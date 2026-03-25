@@ -1,5 +1,6 @@
-const CACHE_NAME = 'missrose-v6';
+const CACHE_NAME = 'missrose-v7';
 const urlsToCache = [
+
     './',
     './index.html',
     './styles.css',
