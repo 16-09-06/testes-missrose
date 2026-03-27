@@ -44,6 +44,10 @@ textarea { height: 80px; resize: none; }
 .sheet-viewer { display: none; flex-direction: column; width: 100%; }
 .sheet-controls { display: flex; gap: 10px; margin-bottom: 15px; }
 
+/* CLIQUE FICHA DO CLIENTE */
+.clickable-client { color: var(--primary); cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 4px; transition: 0.2s; }
+.clickable-client:hover { color: var(--dark-pink); font-weight: bold; }
+
 .history-log { margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px; font-size: 13px; color: #666; }
 .history-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dotted #ddd; }
 

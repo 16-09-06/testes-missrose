@@ -5,12 +5,15 @@ const URL_SHEET_BANCO = "https://docs.google.com/spreadsheets/d/1_UIvezU3eh5HQ98
 const URL_SHEET_LOGISTICA = "https://docs.google.com/spreadsheets/d/1inVjNncz3YdWV31iEShiYjCUkWEE0fOfkTXCwRDu98k/edit?usp=sharing";
 const URL_SHEET_GERENCIAL = "https://docs.google.com/spreadsheets/d/17PYbOV8CuEwghbaDiUmJXvc1mCT7tZ55iKvkQFzTeXc/edit?usp=sharing";
 const URL_LOGIN_DB = "https://script.google.com/macros/s/AKfycbyffqQQUSRWVVpyQyKyKTC5fwyEii8RzF9fFlJflwhFupAZ-QusTzhXrGSgMFEZQRHgxA/exec";
+// 👇 COLOQUE AQUI A URL DO NOSSO NOVO SCRIPT DE PUSH (Passo 2) 👇
+const URL_PUSH_BACKEND = "https://script.google.com/macros/s/AKfycbwYIXrKAGUYam3dYYpEjHvhQA1bHDa8CYdDYE1SMcb6dewyG4XY0PR7ax_HDHFNHRHRbg/exec";
 
 // 👇 COLOQUE AQUI O ID DA SUA PLANILHA ONDE AS COMISSÕES SÃO SALVAS 👇
 const ID_PLANILHA_COMISSOES = "17PYbOV8CuEwghbaDiUmJXvc1mCT7tZ55iKvkQFzTeXc";
+const VAPID_PUBLIC_KEY = "BGypw8mTc6GQyLOdsO33Qdy-Pqg4K0jj7UQ8PKZkvA-hDloY8DO1x43N0eCQsA8gPcGvRskpk8MlDl3g80WcOPE"; // Chave pública gerada no VapidKeys
 
 // Controle de Versão do App (Mude sempre que enviar atualização)
-const APP_VERSION = "1.0.7";
+const APP_VERSION = "1.0.8";
 
 let usuarioLogado = localStorage.getItem('usuarioLogado');
 
@@ -21,6 +24,7 @@ let totalVendidoSessao = 0;
 let totalComissaoSessao = 0;
 let chartMensal = null;
 let chartVendedoras = null;
+let vendasGlobaisDash = []; // Memória para o Mini-CRM
 
 // Configuração Global do Toast (Notificações não-intrusivas)
 const Toast = Swal.mixin({
@@ -93,6 +97,37 @@ function setAndLockVendedora(user) {
     setTimeout(carregarDashboardReal, 1000); 
     if(!window.dashInterval) {
         window.dashInterval = setInterval(carregarDashboardReal, 60000); // Atualiza os gráficos a cada 1 min
+    }
+
+    // NOVO: Configura recursos de admin
+    setupAdminFeatures(user);
+}
+
+function setupAdminFeatures(user) {
+    const userUpper = user.toUpperCase();
+    const superAdmins = ['KAYK', 'JHONATA', 'DEBORA', 'FELIPE'];
+    const isSuperAdmin = superAdmins.includes(userUpper);
+    const isAdmin = isSuperAdmin || ['RENATA', 'CAROL'].includes(userUpper);
+
+    const painelPush = document.getElementById('painelAdminPush');
+    if (!painelPush) return;
+
+    if (isAdmin) {
+        painelPush.classList.remove('hidden');
+        const pushTargetSelect = document.getElementById('pushTarget');
+        pushTargetSelect.innerHTML = ''; // Limpa opções
+
+        if (userUpper === 'RENATA') {
+            pushTargetSelect.add(new Option('Minha Equipe (Renata)', 'equipe_renata'));
+        } else if (userUpper === 'CAROL') {
+            pushTargetSelect.add(new Option('Minha Equipe (Carol)', 'equipe_carol'));
+        } else if (isSuperAdmin) {
+            pushTargetSelect.add(new Option('Todas as Vendedoras', 'todas'));
+            pushTargetSelect.add(new Option('Equipe Renata', 'equipe_renata'));
+            pushTargetSelect.add(new Option('Equipe Carol', 'equipe_carol'));
+        }
+    } else {
+        painelPush.classList.add('hidden');
     }
 }
 
@@ -392,6 +427,10 @@ function calcularComissaoRealTime() {
     }
 }
 
+function limparRascunhoVenda() {
+    localStorage.removeItem('rascunhoVenda');
+}
+
 function limparTelaComissoes() {
     Swal.fire({
         title: 'Deseja limpar tudo?',
@@ -402,7 +441,12 @@ function limparTelaComissoes() {
         cancelButtonColor: '#6c757d',
         confirmButtonText: 'Sim, limpar',
         cancelButtonText: 'Cancelar'
-    }).then((result) => { if (result.isConfirmed) location.reload(); });
+    }).then((result) => { 
+        if (result.isConfirmed) {
+            limparRascunhoVenda();
+            location.reload(); 
+        }
+    });
 }
 
 async function salvarComissao() {
@@ -460,6 +504,38 @@ async function salvarComissao() {
         statusFinanceiro: "Pendente" 
     };
 
+    // --- MODO OFFLINE (FILA DE VENDAS) ---
+    if (!navigator.onLine) {
+        let fila = JSON.parse(localStorage.getItem('vendasOfflineQueue') || '[]');
+        fila.push(payload);
+        localStorage.setItem('vendasOfflineQueue', JSON.stringify(fila));
+        
+        exibirStatus(statusDiv, "📴 Sem internet. Salvo na fila offline!", "#fff3cd", "#856404");
+        Toast.fire({ icon: 'info', title: 'Você está offline. Venda salva na fila local!' });
+        
+        const hora = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const nomeCliAbrev = nomeCliente.length > 15 ? nomeCliente.substring(0, 15) + "..." : nomeCliente;
+        const item = `
+        <div class="history-item" style="align-items: center; color: #856404;">
+            <span>${nomeCliAbrev} - ${totalNfVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span> 
+            <div><span>${hora} 📴</span></div>
+        </div>`;
+        document.getElementById('listaHistoricoComissoes').innerHTML += item;
+
+        document.getElementById('valorNota').value = "";
+        document.getElementById('valorFora').value = "";
+        document.getElementById('cliente').value = "";
+        calcularComissaoRealTime();
+        limparRascunhoVenda();
+        btn.disabled = false;
+        
+        // Badge no botão para avisar que tem vendas pendentes
+        if(!document.getElementById('badgeOffline')) {
+            btn.innerHTML += ` <span id="badgeOffline" style="background: white; color: #856404; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 5px;">Offline</span>`;
+        }
+        return;
+    }
+
     try {
         await fetch(URL_COMISSOES, {
             method: "POST",
@@ -507,6 +583,7 @@ async function salvarComissao() {
         document.getElementById('valorFora').value = "";
         document.getElementById('cliente').value = "";
         calcularComissaoRealTime(); // Zera o preview na tela
+        limparRascunhoVenda(); // Limpa o rascunho pós sucesso
 
     } catch (e) {
         exibirStatus(statusDiv, "❌ Erro na comunicação: " + e.message, "#f8d7da", "#721c24");
@@ -828,9 +905,69 @@ async function verificarAtualizacaoManual() {
     }
 }
 
+// --- AUTO-SAVE (Salva-Vidas) ---
+function salvarRascunhoVenda() {
+    const campos = ['empresaSelecionada', 'equipe', 'vendedora', 'tipoVendedora', 'tipoVenda', 'nomeRepresentante', 'tipoRepresentante', 'porcRep', 'cliente', 'valorNota', 'valorFora', 'divisao', 'porcVend'];
+    const rascunho = {};
+    campos.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) rascunho[id] = el.value;
+    });
+    localStorage.setItem('rascunhoVenda', JSON.stringify(rascunho));
+}
+
+function verificarRascunhoPendente() {
+    const rascunhoSalvo = localStorage.getItem('rascunhoVenda');
+    if (rascunhoSalvo) {
+        const r = JSON.parse(rascunhoSalvo);
+        if(r.valorNota || r.valorFora || r.cliente) { // Só avisa se tiver algo importante preenchido
+            Swal.fire({
+                title: 'Rascunho Encontrado',
+                text: "Você deixou uma venda pela metade na última vez. Deseja continuar?",
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonColor: '#d81b60',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sim, restaurar',
+                cancelButtonText: 'Não, limpar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Object.keys(r).forEach(id => {
+                        const el = document.getElementById(id);
+                        if(el) el.value = r[id];
+                    });
+                    toggleRepresentante();
+                    calcularComissaoRealTime();
+                } else {
+                    limparRascunhoVenda();
+                }
+            });
+        }
+    }
+}
+
+// --- SINCRONIZAÇÃO OFFLINE QUANDO A INTERNET VOLTAR ---
+async function sincronizarFilaOffline() {
+    let fila = JSON.parse(localStorage.getItem('vendasOfflineQueue') || '[]');
+    if(fila.length === 0) return;
+    
+    Toast.fire({ icon: 'info', title: `Sincronizando ${fila.length} venda(s) offline...` });
+    let filaRestante = [];
+    for(let payload of fila) {
+        try {
+            await fetch(URL_COMISSOES, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload) });
+        } catch(e) {
+            filaRestante.push(payload); // Mantém se falhar
+        }
+    }
+    localStorage.setItem('vendasOfflineQueue', JSON.stringify(filaRestante));
+    if(filaRestante.length === 0) { Toast.fire({ icon: 'success', title: 'Todas as vendas sincronizadas!' }); const btn = document.getElementById('btnRegistrar'); if(btn) btn.innerHTML = '✅ Registrar Venda'; }
+}
+
 // --- INICIALIZAÇÕES ---
 document.addEventListener("DOMContentLoaded", () => {
     mudarCorEquipe();
+    atualizarBadgeNotificacoes(); // Inicia o contador de notificações
 
     // Máscaras (IMask)
     const cnpjInput = document.getElementById('cnpjInput');
@@ -869,8 +1006,30 @@ document.addEventListener("DOMContentLoaded", () => {
     const filtroAno = document.getElementById('filtroAnoDash');
     if (filtroAno) filtroAno.value = anoAtualStr;
 
+    // Adiciona Monitoramento de Rascunho na tela de Comissões
+    const formComissao = document.getElementById('telaComissoes');
+    if(formComissao) {
+        // Salva rascunho ao mudar de campo (rápido)
+        formComissao.querySelectorAll('input, select').forEach(el => el.addEventListener('change', salvarRascunhoVenda));
+        // Salva rascunho enquanto digita (com delay para não sobrecarregar)
+        formComissao.querySelectorAll('input').forEach(el => el.addEventListener('input', debounce(salvarRascunhoVenda, 1000)));
+    }
+
+    window.addEventListener('online', sincronizarFilaOffline);
+    sincronizarFilaOffline(); // Tenta sincronizar a fila logo na abertura do app
+    setTimeout(verificarRascunhoPendente, 2000); // Dá tempo de carregar os selects de vendedora
+
     // Registra o Service Worker (Aplicativo de Celular / PWA)
     if ('serviceWorker' in navigator) {
+        // Ouve mensagens enviadas pelo Service Worker (As notificações push que chegam)
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'NOVA_NOTIFICACAO') {
+                salvarNotificacaoLocal(event.data.payload);
+                // Se o app estiver aberto na tela, exibe um balãozinho amigável na hora
+                Toast.fire({ icon: 'info', title: 'Você recebeu uma nova mensagem!' });
+            }
+        });
+
         navigator.serviceWorker.register('sw.js').then(registration => {
             console.log('Service Worker registrado com sucesso!');
 
@@ -905,6 +1064,9 @@ document.addEventListener("DOMContentLoaded", () => {
             refreshing = true;
         });
     }
+
+    // Checa o status da inscrição Push ao carregar a página
+    checkPushSubscription();
 });
 
 async function carregarDashboardReal() {
@@ -957,6 +1119,8 @@ async function carregarDashboardReal() {
         let colTotal = 11;    // Total do Pedido
         let colComissao = 25; // Valor da Comissão (a última da sua lista)
 
+        vendasGlobaisDash = data.table.rows || []; // Salva pro Mini-CRM
+
         if (!data.table || !data.table.rows) {
             renderizarDashAvancado([], mesAtual, anoAtual, colVend, colTotal, 0, colCli, vendedoraLogada, valInicio, valFim, fVend, colComissao);
             return;
@@ -1000,10 +1164,11 @@ async function carregarDashboardReal() {
         let clientesMemoria = new Set(); // Memória para o Autocompletar
         
         // Variáveis para Comparação de Mês Anterior
+        const isAnoInteiro = mesAtual === "ANO INTEIRO";
         const mesesRef = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
         let idxMes = mesesRef.indexOf(mesAtual);
-        let mesPrevStr = idxMes <= 0 ? 'DEZEMBRO' : mesesRef[idxMes - 1];
-        let anoPrevStr = idxMes <= 0 ? (parseInt(anoAtual) - 1).toString() : anoAtual;
+        let mesPrevStr = isAnoInteiro ? "" : (idxMes <= 0 ? 'DEZEMBRO' : mesesRef[idxMes - 1]);
+        let anoPrevStr = isAnoInteiro ? (parseInt(anoAtual) - 1).toString() : (idxMes <= 0 ? (parseInt(anoAtual) - 1).toString() : anoAtual);
         
         let somaTotalVendasPrev = 0;
         let countPedidosPrev = 0;
@@ -1030,8 +1195,8 @@ async function carregarDashboardReal() {
             }
 
             // Aplica Lógica de Filtro Avançado
-            let isDateValid = (valInicio && valFim && rowDate) ? (rowDate >= valInicio && rowDate <= valFim) : (rowMes === mesAtual && rowAno === anoAtual);
-            let isDateValidPrev = (valInicio && valFim && rowDate) ? false : (rowMes === mesPrevStr && rowAno === anoPrevStr); // Não calcula % em datas customizadas
+            let isDateValid = (valInicio && valFim && rowDate) ? (rowDate >= valInicio && rowDate <= valFim) : ((isAnoInteiro || rowMes === mesAtual) && rowAno === anoAtual);
+            let isDateValidPrev = (valInicio && valFim && rowDate) ? false : ((isAnoInteiro || rowMes === mesPrevStr) && rowAno === anoPrevStr); // Não calcula % em datas customizadas
             
             let isVendaValida = false;
             if (isSuperAdmin) {
@@ -1140,8 +1305,11 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
     Chart.defaults.color = isDark ? '#e0e0e0' : '#666';
 
     const vendasPorVendedora = {};
-    const vendasMensais = { 'JANEIRO':0, 'FEVEREIRO':0, 'MARÇO':0, 'ABRIL':0, 'MAIO':0, 'JUNHO':0, 'JULHO':0, 'AGOSTO':0, 'SETEMBRO':0, 'OUTUBRO':0, 'NOVEMBRO':0, 'DEZEMBRO':0 };
     const vendasPorCliente = {};
+    const isAnoInteiro = mesAtual === "ANO INTEIRO";
+    const faturamentoAtual = isAnoInteiro ? new Array(12).fill(0) : new Array(31).fill(0);
+    const faturamentoPrev = isAnoInteiro ? new Array(12).fill(0) : new Array(31).fill(0);
+    
     let ultimasVendas = [];
     let reciboLinhas = "";
     let totalComissaoRecibo = 0;
@@ -1159,9 +1327,6 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
         let rowAno = dataEmissao.match(/\d{4}/) ? dataEmissao.match(/\d{4}/)[0] : new Date().getFullYear().toString();
 
         if (total > 0) {
-            // Soma para o gráfico da Linha APENAS no ano selecionado (Mesmo com datas livres, não quebramos o resumo anual!)
-            if (rowAno === anoAtual && vendasMensais[rowMes] !== undefined) vendasMensais[rowMes] += total;
-            
             let rowDate = null;
             if (dataEmissao.match(/\d{2}\/\d{2}\/\d{4}/)) {
                 let parts = dataEmissao.match(/(\d{2})\/(\d{2})\/(\d{4})/);
@@ -1171,7 +1336,19 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
                 if (m) rowDate = new Date(m[1], m[2], m[3]);
             }
 
-            let isDateValid = (valInicio && valFim && rowDate) ? (rowDate >= valInicio && rowDate <= valFim) : (rowMes === mesAtual && rowAno === anoAtual);
+            // Tenta achar o dia/mês para o Gráfico Comparativo
+            let diaVenda = 1;
+            let mesVendaIdx = 0;
+            if (dataEmissao.match(/\d{2}\/\d{2}\/\d{4}/)) {
+                let parts = dataEmissao.split('/');
+                diaVenda = parseInt(parts[0], 10);
+                mesVendaIdx = parseInt(parts[1], 10) - 1;
+            } else if (rowDate) {
+                diaVenda = rowDate.getDate();
+                mesVendaIdx = rowDate.getMonth();
+            }
+
+            let isDateValid = (valInicio && valFim && rowDate) ? (rowDate >= valInicio && rowDate <= valFim) : ((isAnoInteiro || rowMes === mesAtual) && rowAno === anoAtual);
             
             let isVendaValida = false;
             if (isSuperAdmin) {
@@ -1185,6 +1362,33 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
             }
 
             if (fVend !== "TODAS" && vendedora !== fVend) isVendaValida = false;
+
+            if (isDateValid && isVendaValida) {
+                // Soma para a linha do Gráfico
+                if (isAnoInteiro) {
+                    if (mesVendaIdx >= 0 && mesVendaIdx <= 11) faturamentoAtual[mesVendaIdx] += total;
+                } else {
+                    if(diaVenda >= 1 && diaVenda <= 31) faturamentoAtual[diaVenda - 1] += total;
+                }
+                
+                // ... [O resto do IF continua igual preenchendo as tabelas]
+            }
+
+            // Condição separada para popular a linha cinza (Período Anterior) do gráfico
+            const mesesRef = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+            let idxM = mesesRef.indexOf(mesAtual);
+            let mesPrevS = isAnoInteiro ? "" : (idxM <= 0 ? 'DEZEMBRO' : mesesRef[idxM - 1]);
+            let anoPrevS = isAnoInteiro ? (parseInt(anoAtual) - 1).toString() : (idxM <= 0 ? (parseInt(anoAtual) - 1).toString() : anoAtual);
+            
+            let isPrevValid = isAnoInteiro ? (rowAno === anoPrevS) : (rowMes === mesPrevS && rowAno === anoPrevS);
+            
+            if (isVendaValida && isPrevValid) {
+                if (isAnoInteiro) {
+                    if (mesVendaIdx >= 0 && mesVendaIdx <= 11) faturamentoPrev[mesVendaIdx] += total;
+                } else {
+                    if (diaVenda >= 1 && diaVenda <= 31) faturamentoPrev[diaVenda - 1] += total;
+                }
+            }
 
             if (isDateValid && isVendaValida) {
                 let isLiquido = row.c.some(c => c && typeof c.v === 'string' && c.v.toUpperCase() === 'LIQUIDO');
@@ -1212,7 +1416,7 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
                         <td style="padding: 10px 15px; border-bottom: 1px solid #eee;">${dataEmissao}</td>
                         <td style="padding: 10px 15px; border-bottom: 1px solid #eee; font-weight: bold;">${vendedora}</td>
                         <td style="padding: 10px 15px; border-bottom: 1px solid #eee;">${empresa}</td>
-                        <td style="padding: 10px 15px; border-bottom: 1px solid #eee;">${cliente.length > 25 ? cliente.substring(0, 25) + '...' : cliente}</td>
+                        <td style="padding: 10px 15px; border-bottom: 1px solid #eee;"><span class="clickable-client" onclick="abrirFichaCliente(this.textContent)">${cliente.length > 25 ? cliente.substring(0, 25) + '...' : cliente}</span></td>
                         <td style="padding: 10px 15px; border-bottom: 1px solid #eee; color: #2e7d32; font-weight: bold;">R$ ${total.toFixed(2)}</td>
                         <td style="padding: 10px 15px; border-bottom: 1px solid #eee;">${statusBadge}</td>
                     </tr>`);
@@ -1251,7 +1455,7 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
         let medalha = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : "🔹";
         topClientesHTML += `
             <div style="display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid ${isDark ? '#444' : '#eee'};">
-                <span style="font-weight: bold; color: var(--primary); font-size: 13px;">${medalha} ${cli[0].length > 18 ? cli[0].substring(0,18)+'...' : cli[0]}</span>
+                <span class="clickable-client" style="font-weight: bold; font-size: 13px;" onclick="abrirFichaCliente(this.textContent.replace(/^[^a-zA-Z0-9]+/, '').trim())">${medalha} ${cli[0].length > 18 ? cli[0].substring(0,18)+'...' : cli[0]}</span>
                 <span style="font-weight: bold; font-size: 13px;">R$ ${cli[1].toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
             </div>
         `;
@@ -1262,21 +1466,25 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
     const divTopCli = document.getElementById('listaTopClientesDash');
     if (divTopCli) divTopCli.innerHTML = topClientesHTML;
 
-    // Prepara dados do Gráfico Mensal (ignorando meses no futuro que estão com 0)
-    const labelsMensal = []; const dataMensal = [];
-    for (let m in vendasMensais) {
-        if (vendasMensais[m] > 0 || labelsMensal.length > 0) {
-            labelsMensal.push(m.substring(0,3)); // Pega as 3 primeiras letras (JAN, FEV)
-            dataMensal.push(vendasMensais[m]);
-        }
-    }
-    if(labelsMensal.length === 0) { labelsMensal.push(mesAtual.substring(0,3)); dataMensal.push(0); } // Garantia pra não ficar em branco
-
+    // Prepara Gráfico Comparativo
+    const labelsGrafico = isAnoInteiro ? ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'] : Array.from({length: 31}, (_, i) => (i + 1).toString());
+    const labelAtual = isAnoInteiro ? `Vendas em ${anoAtual}` : `Vendas em ${mesAtual}`;
+    const labelPrev = isAnoInteiro ? `Ano Anterior` : `Mês Anterior`;
+    
+    const tit = document.getElementById('tituloEvolucao');
+    if (tit) tit.innerText = isAnoInteiro ? 'Evolução Mensal (Ano Atual x Ano Anterior)' : 'Evolução Diária (Mês Atual x Mês Anterior)';
+    
     const ctxMensal = document.getElementById('graficoMensal').getContext('2d');
     if (chartMensal) chartMensal.destroy();
     chartMensal = new Chart(ctxMensal, {
         type: 'line',
-        data: { labels: labelsMensal, datasets: [{ label: 'Faturamento Anual (R$)', data: dataMensal, borderColor: '#d81b60', backgroundColor: 'rgba(216, 27, 96, 0.1)', fill: true, tension: 0.4 }] },
+        data: { 
+            labels: labelsGrafico, 
+            datasets: [
+                { label: labelAtual, data: faturamentoAtual, borderColor: '#d81b60', backgroundColor: 'rgba(216, 27, 96, 0.1)', fill: true, tension: 0.4 },
+                { label: labelPrev, data: faturamentoPrev, borderColor: isDark ? '#888' : '#bbb', borderDash: [5, 5], fill: false, tension: 0.4, borderWidth: 2 }
+            ] 
+        },
         options: { 
             responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
             scales: {
@@ -1309,6 +1517,47 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
             } 
         }
     });
+}
+
+// --- LÓGICA DO MINI-CRM (FICHA DO CLIENTE) ---
+function abrirFichaCliente(nomeClienteLimpo) {
+    const nomeBusca = nomeClienteLimpo.replace(/\.\.\.$/, '').trim().toUpperCase();
+    document.getElementById('fichaNomeCliente').innerText = nomeBusca;
+    
+    let totalGasto = 0;
+    let dataUltimaCompra = null;
+    let historicoHtml = "";
+    
+    // Varre todas as linhas puxadas da planilha buscando esse cliente
+    vendasGlobaisDash.forEach(row => {
+        if(!row.c) return;
+        let rowCli = row.c[5] && row.c[5].v ? String(row.c[5].v).toUpperCase().trim() : "";
+        if (rowCli.includes(nomeBusca)) {
+            let dataEmissao = row.c[3] && row.c[3].f ? String(row.c[3].f) : (row.c[3] && row.c[3].v ? String(row.c[3].v).substring(0, 10) : "N/A");
+            let rawTotal = row.c[11] ? row.c[11].v : 0;
+            let valTotal = typeof rawTotal === 'number' ? rawTotal : parseFloat(String(rawTotal).replace(',', '.')) || 0;
+            
+            totalGasto += valTotal;
+            if(!dataUltimaCompra) dataUltimaCompra = dataEmissao; // Pega a primeira que achar (está decrescente)
+            
+            historicoHtml += `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #ccc;">
+                    <span>📅 ${dataEmissao}</span>
+                    <strong style="color: var(--primary);">R$ ${valTotal.toFixed(2)}</strong>
+                </div>
+            `;
+        }
+    });
+
+    document.getElementById('fichaTotalGasto').innerText = totalGasto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('fichaUltimaCompra').innerText = dataUltimaCompra || "N/A";
+    document.getElementById('fichaListaCompras').innerHTML = historicoHtml || "<div>Sem registros anteriores.</div>";
+    
+    document.getElementById('modalFichaCliente').classList.remove('hidden');
+}
+
+function fecharFichaCliente() {
+    document.getElementById('modalFichaCliente').classList.add('hidden');
 }
 
 function exportarTabelaExcel() {
@@ -1383,4 +1632,213 @@ async function compartilharReciboWhatsApp() {
     } else {
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(textoRecibo)}`);
     }
+}
+
+// --- LÓGICA PARA NOTIFICAÇÕES PUSH ---
+
+// Helper function para converter a chave VAPID para o formato que o navegador precisa
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+async function subscribeUserToPush() {
+    const pushStatus = document.getElementById('pushStatus');
+    const pushButton = document.getElementById('btnHabilitarPush');
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        pushStatus.innerText = 'Notificações Push não são suportadas neste navegador.';
+        pushButton.disabled = true;
+        return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+        pushStatus.innerText = 'Permissão para notificações foi negada.';
+        return;
+    }
+
+    pushButton.disabled = true;
+    pushStatus.innerText = 'Inscrevendo para receber notificações...';
+
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (subscription === null) {
+            const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+            subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: applicationServerKey
+            });
+        }
+
+        // PARTE 2: Enviar 'subscription' para o servidor para salvar
+        await sendSubscriptionToBackend(subscription);
+
+        pushStatus.innerText = 'Você está inscrito para receber notificações!';
+        pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
+        Toast.fire({ icon: 'success', title: 'Notificações habilitadas!' });
+
+    } catch (error) {
+        console.error('Falha ao inscrever no Push: ', error);
+        pushStatus.innerText = 'Falha ao habilitar notificações.';
+        pushButton.disabled = false;
+    }
+}
+
+async function sendSubscriptionToBackend(subscription) {
+    if (URL_PUSH_BACKEND.includes("COLOQUE_A_URL_DO_SEU_NOVO_BACKEND_AQUI")) {
+        console.warn("URL do Script de Push não configurada. Inscrição não foi salva no backend.");
+        return;
+    }
+
+    try {
+        const response = await fetch(URL_PUSH_BACKEND, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                acao: "saveSubscription",
+                subscription: {
+                    usuario: usuarioLogado,
+                    inscricao: subscription
+                }
+            })
+        });
+        const result = await response.text();
+        console.log("Resposta do backend (salvar inscrição):", result);
+    } catch (error) {
+        console.error("Erro ao enviar inscrição para o backend:", error);
+    }
+}
+
+async function enviarNotificacaoPush() {
+    const target = document.getElementById('pushTarget').value;
+    const title = document.getElementById('pushTitle').value;
+    const body = document.getElementById('pushBody').value;
+    const btn = document.querySelector('#painelAdminPush button');
+
+    if (!body) {
+        Swal.fire('Atenção', 'A mensagem não pode estar vazia.', 'warning');
+        return;
+    }
+    
+    if (URL_PUSH_BACKEND.includes("COLOQUE_A_URL_DO_SEU_NOVO_BACKEND_AQUI")) {
+        Swal.fire('Erro de Configuração', 'A URL do serviço de notificações não foi definida no app.js.', 'error');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+
+    try {
+        const response = await fetch(URL_PUSH_BACKEND, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                acao: "sendMessage",
+                messagePayload: { target, title, body, url: "/" }
+            })
+        });
+        const result = await response.text();
+        Swal.fire('Sucesso!', result, 'success');
+        document.getElementById('pushBody').value = '';
+        document.getElementById('pushTitle').value = '';
+
+    } catch (error) {
+        Swal.fire('Erro!', 'Falha ao enviar a notificação. Verifique a conexão.', 'error');
+        console.error("Erro ao enviar notificação:", error);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Mensagem';
+    }
+}
+
+async function checkPushSubscription() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+    const pushButton = document.getElementById('btnHabilitarPush');
+    const pushStatus = document.getElementById('pushStatus');
+    if (!pushButton || !pushStatus) return;
+
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    
+    if (subscription) {
+        pushStatus.innerText = 'Você já está recebendo notificações.';
+        pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
+        pushButton.disabled = true;
+    }
+}
+
+// --- SISTEMA DE CAIXA DE MENSAGENS (IN-APP) ---
+
+function salvarNotificacaoLocal(payload) {
+    let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
+    notifs.unshift({
+        title: payload.title || "Aviso Miss Rôse",
+        body: payload.body || "Você tem uma nova mensagem.",
+        date: new Date().toLocaleString('pt-BR'),
+        lida: false
+    });
+    localStorage.setItem('appNotificacoes', JSON.stringify(notifs));
+    atualizarBadgeNotificacoes();
+}
+
+function atualizarBadgeNotificacoes() {
+    let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
+    let naoLidas = notifs.filter(n => !n.lida).length;
+    const badge = document.getElementById('badgeNotificacao');
+    
+    if (badge) {
+        if (naoLidas > 0) {
+            badge.innerText = naoLidas > 9 ? "9+" : naoLidas;
+            badge.style.display = 'block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+}
+
+function abrirPainelNotificacoes() {
+    document.getElementById('modalNotificacoes').classList.remove('hidden');
+    renderizarNotificacoes();
+}
+
+function fecharPainelNotificacoes() {
+    document.getElementById('modalNotificacoes').classList.add('hidden');
+    // Marca todas como lidas ao fechar o painel
+    let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
+    notifs.forEach(n => n.lida = true);
+    localStorage.setItem('appNotificacoes', JSON.stringify(notifs));
+    atualizarBadgeNotificacoes();
+}
+
+function renderizarNotificacoes() {
+    let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
+    const container = document.getElementById('listaNotificacoesPainel');
+    if (notifs.length === 0) {
+        container.innerHTML = '<p style="text-align: center; color: #888; margin-top: 20px;">Nenhuma mensagem no momento.</p>';
+        return;
+    }
+    container.innerHTML = notifs.map(n => `
+        <div style="background: ${n.lida ? 'transparent' : 'rgba(216, 27, 96, 0.05)'}; border: 1px solid ${n.lida ? '#ddd' : 'var(--primary)'}; border-left: 4px solid ${n.lida ? '#ccc' : 'var(--primary)'}; padding: 12px; border-radius: 6px; font-size: 13px; transition: 0.3s;">
+            <strong style="display: block; color: var(--primary); margin-bottom: 5px; font-size: 14px;">${n.title}</strong>
+            <p style="margin: 0 0 5px 0; color: var(--text);">${n.body}</p>
+            <small style="color: #888;"><i class="far fa-clock"></i> Recebido em: ${n.date}</small>
+        </div>
+    `).join('');
+}
+
+function limparNotificacoes() {
+    localStorage.setItem('appNotificacoes', '[]');
+    renderizarNotificacoes();
+    atualizarBadgeNotificacoes();
+    Toast.fire({ icon: 'success', title: 'Caixa de entrada limpa!' });
 }
