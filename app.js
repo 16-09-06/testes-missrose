@@ -5,15 +5,17 @@ const URL_SHEET_BANCO = "https://docs.google.com/spreadsheets/d/1_UIvezU3eh5HQ98
 const URL_SHEET_LOGISTICA = "https://docs.google.com/spreadsheets/d/1inVjNncz3YdWV31iEShiYjCUkWEE0fOfkTXCwRDu98k/edit?usp=sharing";
 const URL_SHEET_GERENCIAL = "https://docs.google.com/spreadsheets/d/17PYbOV8CuEwghbaDiUmJXvc1mCT7tZ55iKvkQFzTeXc/edit?usp=sharing";
 const URL_LOGIN_DB = "https://script.google.com/macros/s/AKfycbyffqQQUSRWVVpyQyKyKTC5fwyEii8RzF9fFlJflwhFupAZ-QusTzhXrGSgMFEZQRHgxA/exec";
-// 👇 COLOQUE AQUI A URL DO NOSSO NOVO SCRIPT DE PUSH (Passo 2) 👇
+
+// 👇 COLOQUE A URL DO SEU NOVO SCRIPT DE PUSH AQUI 👇
 const URL_PUSH_BACKEND = "https://script.google.com/macros/s/AKfycbwYIXrKAGUYam3dYYpEjHvhQA1bHDa8CYdDYE1SMcb6dewyG4XY0PR7ax_HDHFNHRHRbg/exec";
+// 👇 COLOQUE SEU APP ID DO ONESIGNAL AQUI 👇
+const ONESIGNAL_APP_ID = "a18338fb-0f1d-41ab-a186-42e258bb8f69";
 
 // 👇 COLOQUE AQUI O ID DA SUA PLANILHA ONDE AS COMISSÕES SÃO SALVAS 👇
 const ID_PLANILHA_COMISSOES = "17PYbOV8CuEwghbaDiUmJXvc1mCT7tZ55iKvkQFzTeXc";
-const VAPID_PUBLIC_KEY = "BGypw8mTc6GQyLOdsO33Qdy-Pqg4K0jj7UQ8PKZkvA-hDloY8DO1x43N0eCQsA8gPcGvRskpk8MlDl3g80WcOPE"; // Chave pública gerada no VapidKeys
 
 // Controle de Versão do App (Mude sempre que enviar atualização)
-const APP_VERSION = "1.0.8";
+const APP_VERSION = "1.0.9";
 
 let usuarioLogado = localStorage.getItem('usuarioLogado');
 
@@ -1021,15 +1023,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Registra o Service Worker (Aplicativo de Celular / PWA)
     if ('serviceWorker' in navigator) {
-        // Ouve mensagens enviadas pelo Service Worker (As notificações push que chegam)
-        navigator.serviceWorker.addEventListener('message', (event) => {
-            if (event.data && event.data.type === 'NOVA_NOTIFICACAO') {
-                salvarNotificacaoLocal(event.data.payload);
-                // Se o app estiver aberto na tela, exibe um balãozinho amigável na hora
-                Toast.fire({ icon: 'info', title: 'Você recebeu uma nova mensagem!' });
-            }
-        });
-
         navigator.serviceWorker.register('sw.js').then(registration => {
             console.log('Service Worker registrado com sucesso!');
 
@@ -1065,6 +1058,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    initOneSignal(); // Inicia o motor de mensagens
     // Checa o status da inscrição Push ao carregar a página
     checkPushSubscription();
 });
@@ -1636,86 +1630,73 @@ async function compartilharReciboWhatsApp() {
 
 // --- LÓGICA PARA NOTIFICAÇÕES PUSH ---
 
-// Helper function para converter a chave VAPID para o formato que o navegador precisa
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
+function initOneSignal() {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+            appId: ONESIGNAL_APP_ID,
+            notifyButton: { enable: false },
+        });
+
+        // Intercepta a notificação e joga para o nosso "Sininho" do aplicativo
+        OneSignal.Notifications.addEventListener('foregroundWillDisplay', function(event) {
+            const notif = event.notification;
+            salvarNotificacaoLocal({ title: notif.title, body: notif.body });
+            Toast.fire({ icon: 'info', title: 'Você tem uma nova mensagem!' });
+        });
+    });
 }
 
 async function subscribeUserToPush() {
     const pushStatus = document.getElementById('pushStatus');
     const pushButton = document.getElementById('btnHabilitarPush');
 
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        pushStatus.innerText = 'Notificações Push não são suportadas neste navegador.';
-        pushButton.disabled = true;
-        return;
-    }
-
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-        pushStatus.innerText = 'Permissão para notificações foi negada.';
-        return;
-    }
-
-    pushButton.disabled = true;
-    pushStatus.innerText = 'Inscrevendo para receber notificações...';
-
-    try {
-        const registration = await navigator.serviceWorker.ready;
-        let subscription = await registration.pushManager.getSubscription();
-
-        if (subscription === null) {
-            const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-            subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: applicationServerKey
-            });
+    window.OneSignalDeferred.push(async function(OneSignal) {
+        pushStatus.innerText = 'Solicitando permissão...';
+        await OneSignal.Notifications.requestPermission();
+        
+        if (OneSignal.Notifications.permission === true) {
+            pushStatus.innerText = 'Você está inscrito para receber notificações!';
+            pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
+            pushButton.disabled = true;
+            Toast.fire({ icon: 'success', title: 'Notificações habilitadas!' });
+            
+            tagOneSignalUser(usuarioLogado); // Classifica a vendedora na equipe dela
+        } else {
+            pushStatus.innerText = 'Permissão negada pelo navegador.';
+            pushButton.disabled = false;
         }
-
-        // PARTE 2: Enviar 'subscription' para o servidor para salvar
-        await sendSubscriptionToBackend(subscription);
-
-        pushStatus.innerText = 'Você está inscrito para receber notificações!';
-        pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
-        Toast.fire({ icon: 'success', title: 'Notificações habilitadas!' });
-
-    } catch (error) {
-        console.error('Falha ao inscrever no Push: ', error);
-        pushStatus.innerText = 'Falha ao habilitar notificações.';
-        pushButton.disabled = false;
-    }
+    });
 }
 
-async function sendSubscriptionToBackend(subscription) {
-    if (URL_PUSH_BACKEND.includes("COLOQUE_A_URL_DO_SEU_NOVO_BACKEND_AQUI")) {
-        console.warn("URL do Script de Push não configurada. Inscrição não foi salva no backend.");
-        return;
-    }
+function tagOneSignalUser(user) {
+    if(!user) return;
+    const userUpper = user.toUpperCase();
+    const equipeRenata = ['RENATA', 'HOZANA', 'ISRAEL', 'ROSANGELA', 'SARA', 'VINICIUS'];
+    const equipeCarol  = ['CAROL', 'ALICE', 'CHARLENE', 'HEMILLY', 'MICHELLE'];
+    
+    window.OneSignalDeferred.push(async function(OneSignal) {
+        if (equipeRenata.includes(userUpper)) {
+            OneSignal.User.addTag("equipe", "equipe_renata");
+        } else if (equipeCarol.includes(userUpper)) {
+            OneSignal.User.addTag("equipe", "equipe_carol");
+        }
+    });
+}
 
-    try {
-        const response = await fetch(URL_PUSH_BACKEND, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-                acao: "saveSubscription",
-                subscription: {
-                    usuario: usuarioLogado,
-                    inscricao: subscription
-                }
-            })
-        });
-        const result = await response.text();
-        console.log("Resposta do backend (salvar inscrição):", result);
-    } catch (error) {
-        console.error("Erro ao enviar inscrição para o backend:", error);
-    }
+async function checkPushSubscription() {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async function(OneSignal) {
+        if (OneSignal.Notifications.permission === true) {
+            const pushButton = document.getElementById('btnHabilitarPush');
+            const pushStatus = document.getElementById('pushStatus');
+            if (pushButton && pushStatus) {
+                pushStatus.innerText = 'Você já está recebendo notificações.';
+                pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
+                pushButton.disabled = true;
+            }
+        }
+    });
 }
 
 async function enviarNotificacaoPush() {
@@ -1726,11 +1707,6 @@ async function enviarNotificacaoPush() {
 
     if (!body) {
         Swal.fire('Atenção', 'A mensagem não pode estar vazia.', 'warning');
-        return;
-    }
-    
-    if (URL_PUSH_BACKEND.includes("COLOQUE_A_URL_DO_SEU_NOVO_BACKEND_AQUI")) {
-        Swal.fire('Erro de Configuração', 'A URL do serviço de notificações não foi definida no app.js.', 'error');
         return;
     }
 
@@ -1757,23 +1733,6 @@ async function enviarNotificacaoPush() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Mensagem';
-    }
-}
-
-async function checkPushSubscription() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-
-    const pushButton = document.getElementById('btnHabilitarPush');
-    const pushStatus = document.getElementById('pushStatus');
-    if (!pushButton || !pushStatus) return;
-
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
-    
-    if (subscription) {
-        pushStatus.innerText = 'Você já está recebendo notificações.';
-        pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
-        pushButton.disabled = true;
     }
 }
 
