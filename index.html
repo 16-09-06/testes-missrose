@@ -13,8 +13,6 @@
     
     <link rel="stylesheet" href="styles.css">
     
-    <!-- OneSignal SDK -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://unpkg.com/imask"></script>
 
@@ -140,7 +138,9 @@
     </div>
     <nav>
         <a id="navDashboard" onclick="alternarTela('dashboard')"><i class="fas fa-chart-line"></i> Dashboard</a>
-        <a id="navComissoes" class="active" onclick="alternarTela('comissoes')"><i class="fas fa-users"></i> Comissões</a>
+        <a id="navComissoes" class="active" onclick="alternarTela('comissoes')"><i class="fas fa-users"></i> Vendas
+        </a>
+        <a id="navMetas" onclick="alternarTela('metas')"><i class="fas fa-bullseye"></i> Metas</a>
         <a id="navFornecedores" onclick="alternarTela('fornecedores')"><i class="fas fa-truck"></i> Fornecedores e Clientes</a>
         <a id="navPlanilhas" onclick="alternarTela('planilhas')"><i class="fas fa-table"></i> PLANILHAS </a>
         <a id="navConfig" onclick="alternarTela('config')"><i class="fas fa-cog"></i> Configurações</a>
@@ -199,6 +199,20 @@
         </select>
     </div>
 
+    <!-- BARRA DE PROGRESSO DE METAS -->
+    <div id="goalProgressContainer" class="result-box hidden" style="margin-bottom: 20px; border-color: #28a745;">
+        <h3 style="margin-top: 0; display: flex; justify-content: space-between; align-items: center; color: #28a745;">
+            <span>🎯 Meta do Mês</span>
+            <span id="goalValues" style="font-size: 14px; font-weight: normal; color: var(--text);">R$ 0,00 / R$ 0,00</span>
+        </h3>
+        <div class="progress-bar-background">
+            <div id="goalProgressBar" class="progress-bar-foreground">
+                <span id="goalPercentageText">0%</span>
+            </div>
+        </div>
+        <p id="goalCompletionText" style="text-align: center; margin: 8px 0 0; font-weight: bold; font-size: 13px; display: none;"></p>
+    </div>
+
     <div class="kpi-grid">
         <div class="kpi-card">
             <div class="kpi-info"><h3>Vendido (Mês)</h3><p id="kpiFaturamento" style="display:inline-block; margin:0;">R$ 0,00</p> <span id="kpiFaturamentoPrev" style="font-size:12px; font-weight:bold;"></span></div>
@@ -230,6 +244,18 @@
             <h3>Ranking Vendedoras (Mês)</h3>
             <div style="position: relative; height: 250px; width: 100%;">
                 <canvas id="graficoVendedoras"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>Vendas por Empresa (Período)</h3>
+            <div style="position: relative; height: 250px; width: 100%;">
+                <canvas id="graficoEmpresas"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>Top 5 Estados por Valor (Período)</h3>
+            <div style="position: relative; height: 250px; width: 100%;">
+                <canvas id="graficoEstados"></canvas>
             </div>
         </div>
     </div>
@@ -277,7 +303,7 @@
             <p><strong>🤝 Comissão Representante:</strong> <span id="valComisRep">R$ 0,00</span></p>
         </div>
     </div>
-    <h2>Sistema de Comissões</h2>
+    <h2>Sistema de Vendas</h2>
     
     <label>Empresa:</label>
     <select id="empresaSelecionada">
@@ -352,6 +378,38 @@
     <label>Cliente (ResultPro):</label>
     <input type="text" id="cliente" list="listaClientesDatalist" placeholder="Digite o nome do cliente" autocomplete="off">
     <datalist id="listaClientesDatalist"></datalist>
+
+    <label>Estado do Cliente:</label>
+    <select id="cidadeUfCliente">
+        <option value="">Selecione o Estado...</option>
+        <option value="ACRE - AC">ACRE - AC</option>
+        <option value="ALAGOAS - AL">ALAGOAS - AL</option>
+        <option value="AMAPÁ - AP">AMAPÁ - AP</option>
+        <option value="AMAZONAS - AM">AMAZONAS - AM</option>
+        <option value="BAHIA - BA">BAHIA - BA</option>
+        <option value="CEARÁ - CE">CEARÁ - CE</option>
+        <option value="DISTRITO FEDERAL - DF">DISTRITO FEDERAL - DF</option>
+        <option value="ESPÍRITO SANTO - ES">ESPÍRITO SANTO - ES</option>
+        <option value="GOIÁS - GO">GOIÁS - GO</option>
+        <option value="MARANHÃO - MA">MARANHÃO - MA</option>
+        <option value="MATO GROSSO - MT">MATO GROSSO - MT</option>
+        <option value="MATO GROSSO DO SUL - MS">MATO GROSSO DO SUL - MS</option>
+        <option value="MINAS GERAIS - MG">MINAS GERAIS - MG</option>
+        <option value="PARÁ - PA">PARÁ - PA</option>
+        <option value="PARAÍBA - PB">PARAÍBA - PB</option>
+        <option value="PARANÁ - PR">PARANÁ - PR</option>
+        <option value="PERNAMBUCO - PE">PERNAMBUCO - PE</option>
+        <option value="PIAUÍ - PI">PIAUÍ - PI</option>
+        <option value="RIO DE JANEIRO - RJ">RIO DE JANEIRO - RJ</option>
+        <option value="RIO GRANDE DO NORTE - RN">RIO GRANDE DO NORTE - RN</option>
+        <option value="RIO GRANDE DO SUL - RS">RIO GRANDE DO SUL - RS</option>
+        <option value="RONDÔNIA - RO">RONDÔNIA - RO</option>
+        <option value="RORAIMA - RR">RORAIMA - RR</option>
+        <option value="SANTA CATARINA - SC">SANTA CATARINA - SC</option>
+        <option value="SÃO PAULO - SP">SÃO PAULO - SP</option>
+        <option value="SERGIPE - SE">SERGIPE - SE</option>
+        <option value="TOCANTINS - TO">TOCANTINS - TO</option>
+    </select>
 
     <label>Valor da Nota/Produto (R$):</label>
     <input type="text" id="valorNota" placeholder="R$ 0,00">
@@ -457,6 +515,50 @@
             <button onclick="abrirNovaAba()" style="width: auto; background: #28a745;"><i class="fas fa-external-link-alt"></i> Abrir no Navegador</button>
         </div>
         <iframe id="framePlanilha" src="about:blank" width="100%" height="700px" style="border:none; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);"></iframe>
+    </div>
+</div>
+
+<div id="telaMetas" class="container hidden">
+    <h2>Acompanhamento de Metas</h2>
+
+    <div id="minhasMetasContainer">
+        <h3>Minhas Metas</h3>
+        <div class="result-box" style="margin-bottom: 15px; border-color: #17a2b8;">
+            <h4 style="margin-top: 0; color: #17a2b8; display: flex; justify-content: space-between;"><span>Meta Diária</span> <span id="valMetaDiaria">R$ 0,00 / R$ 0,00</span></h4>
+            <div class="progress-bar-background"><div id="progMetaDiaria" class="progress-bar-foreground" style="background: #17a2b8;">0%</div></div>
+        </div>
+        <div class="result-box" style="margin-bottom: 15px; border-color: #f39c12;">
+            <h4 style="margin-top: 0; color: #f39c12; display: flex; justify-content: space-between;"><span>Meta Semanal</span> <span id="valMetaSemanal">R$ 0,00 / R$ 0,00</span></h4>
+            <div class="progress-bar-background"><div id="progMetaSemanal" class="progress-bar-foreground" style="background: #f39c12;">0%</div></div>
+        </div>
+        <div class="result-box" style="margin-bottom: 15px; border-color: #28a745;">
+            <h4 style="margin-top: 0; color: #28a745; display: flex; justify-content: space-between;"><span>Meta Mensal</span> <span id="valMetaMensal">R$ 0,00 / R$ 0,00</span></h4>
+            <div class="progress-bar-background"><div id="progMetaMensal" class="progress-bar-foreground" style="background: #28a745;">0%</div></div>
+        </div>
+    </div>
+
+    <div id="metaEquipeContainer" class="result-box" style="margin-bottom: 20px; border-color: #8e44ad;">
+        <h3 style="margin-top: 0; color: #8e44ad; display: flex; justify-content: space-between;"><span>Meta Geral da Equipe (Mensal)</span> <span id="valMetaEquipe">R$ 0,00 / R$ 0,00</span></h3>
+        <div class="progress-bar-background"><div id="progMetaEquipe" class="progress-bar-foreground" style="background: #8e44ad;">0%</div></div>
+    </div>
+
+    <div id="adminMetasContainer" class="hidden" style="margin-top: 30px; border-top: 2px dashed #ccc; padding-top: 20px;">
+        <h3 style="color: var(--primary); margin-top: 0;"><i class="fas fa-cogs"></i> Estabelecer Metas</h3>
+        <label>Vendedora:</label>
+        <select id="selectVendedoraMeta" onchange="carregarMetaFormulario()">
+            <option value="">Selecione uma vendedora...</option>
+        </select>
+        <label>Meta Diária (R$):</label>
+        <input type="number" id="inputMetaDiaria" placeholder="Ex: 500">
+        <label>Meta Semanal (R$):</label>
+        <input type="number" id="inputMetaSemanal" placeholder="Ex: 2500">
+        <label>Meta Mensal (R$):</label>
+        <input type="number" id="inputMetaMensal" placeholder="Ex: 10000">
+        <label>Meta Geral da Equipe (R$) - Afeta a todos:</label>
+        <input type="number" id="inputMetaEquipe" placeholder="Ex: 50000">
+        <button onclick="salvarMetasIndividuais()" style="background: #2980b9;"><i class="fas fa-save"></i> Salvar Metas</button>
+        <h3 style="margin-top: 30px; color: var(--primary);"><i class="fas fa-users"></i> Desempenho da Equipe (Mensal)</h3>
+        <div id="listaDesempenhoEquipe"></div>
     </div>
 </div>
 

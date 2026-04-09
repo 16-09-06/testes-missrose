@@ -1,5 +1,4 @@
-// Importa o motor do OneSignal (Deve ser a primeira linha do arquivo)
-importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+
 
 const CACHE_NAME = 'missrose-v9';
 const urlsToCache = [
@@ -71,4 +70,37 @@ self.addEventListener('message', (event) => {
     if (event.data && event.data.action === 'skipWaiting') {
         self.skipWaiting();
     }
+});
+
+// --- WEB PUSH NATIVO: RECEBER E EXIBIR NOTIFICAÇÕES ---
+self.addEventListener('push', function(event) {
+    console.log('[Service Worker] Push Recebido.');
+    let data = {};
+    if (event.data) {
+        try {
+            data = event.data.json();
+        } catch(e) {
+            data = { title: 'Aviso Miss Rôse', body: event.data.text() };
+        }
+    }
+
+    const options = {
+        body: data.body || "Você tem uma nova mensagem.",
+        icon: './logo_missrose.png',
+        badge: './logo_missrose.png',
+        vibrate: [100, 50, 100],
+        data: { url: data.url || '/' }
+    };
+
+    // Avisa o app.js para colocar o aviso no "Sininho" de notificações do App
+    self.clients.matchAll().then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'PUSH_RECEIVED', payload: data }));
+    });
+
+    event.waitUntil(self.registration.showNotification(data.title || "Miss Rôse", options));
+});
+
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close();
+    event.waitUntil(clients.openWindow(event.notification.data.url));
 });

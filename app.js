@@ -1,21 +1,28 @@
 // URLs das suas Planilhas
-const URL_COMISSOES = "https://script.google.com/macros/s/AKfycbxZO7jiev9MWxuQgAfaPdark6geTUqWAr9eYypWG_0qvqx-sVxdx6agnDu1aFIMwBL6aA/exec";
+const URL_COMISSOES = "https://script.google.com/macros/s/AKfycbxHovQbCHgl6L7AVOlz4bl1ih1Ncx1XgNgDW73ANmN21Z1oPpnyTIMY2tKj9NZdEqkb/exec";
+const URL_METAS_DB = "https://script.google.com/macros/s/AKfycbz1aV-T0mhuQHm8obX13aFQn8uxhAQirQeS4nPF90nzCmHirCgOujOguXgxlW7sul4W/exec";
 const URL_FORNECEDORES = "https://script.google.com/macros/s/AKfycbxpMXA3xWANJ8ivdoj_3ZbUV0nCXDWvJ7Ja5E6bTAdVquSImH_gDfQ9pabnwvoaZK5b/exec";
 const URL_SHEET_BANCO = "https://docs.google.com/spreadsheets/d/1_UIvezU3eh5HQ98ttIXsViCCsY2opGwNOfZbv4SVFfc/edit?usp=sharing";
 const URL_SHEET_LOGISTICA = "https://docs.google.com/spreadsheets/d/1inVjNncz3YdWV31iEShiYjCUkWEE0fOfkTXCwRDu98k/edit?usp=sharing";
-const URL_SHEET_GERENCIAL = "https://docs.google.com/spreadsheets/d/17PYbOV8CuEwghbaDiUmJXvc1mCT7tZ55iKvkQFzTeXc/edit?usp=sharing";
+const URL_SHEET_GERENCIAL = "https://docs.google.com/spreadsheets/d/1mNy4tXwYqFCcrLP37ts8gDsxJe0Uxjo7Ikmu38gHtB8/edit#gid=0";
 const URL_LOGIN_DB = "https://script.google.com/macros/s/AKfycbyffqQQUSRWVVpyQyKyKTC5fwyEii8RzF9fFlJflwhFupAZ-QusTzhXrGSgMFEZQRHgxA/exec";
 
-// 👇 COLOQUE A URL DO SEU NOVO SCRIPT DE PUSH AQUI 👇
-const URL_PUSH_BACKEND = "https://script.google.com/macros/s/AKfycbwYIXrKAGUYam3dYYpEjHvhQA1bHDa8CYdDYE1SMcb6dewyG4XY0PR7ax_HDHFNHRHRbg/exec";
-// 👇 COLOQUE SEU APP ID DO ONESIGNAL AQUI 👇
-const ONESIGNAL_APP_ID = "a18338fb-0f1d-41ab-a186-42e258bb8f69";
+// ✅ URL do Servidor Flask (Python)
+// Como o GitHub Pages é HTTPS, o link da sua API também DEVE SER HTTPS!
+// Cole aqui a URL do seu servidor na nuvem (ex: Render, Railway) quando for disponibilizar.
+const URL_FLASK = "https://kayklima.pythonanywhere.com";
+
+// 👇 COLOQUE SUA CHAVE PÚBLICA VAPID AQUI 👇
+const VAPID_PUBLIC_KEY = "BCGB4GBtvMovAqlJkoVUIWGc2RP-8J1DzE7cZZ1Qo9YRDfKYkKUUa781Vo0tdOAeunSvWFRK9E9S33YoQp6rBBs";
 
 // 👇 COLOQUE AQUI O ID DA SUA PLANILHA ONDE AS COMISSÕES SÃO SALVAS 👇
-const ID_PLANILHA_COMISSOES = "17PYbOV8CuEwghbaDiUmJXvc1mCT7tZ55iKvkQFzTeXc";
+const ID_PLANILHA_COMISSOES = "1mNy4tXwYqFCcrLP37ts8gDsxJe0Uxjo7Ikmu38gHtB8";
+
+// 👇 COLOQUE AQUI O ID DA SUA NOVA PLANILHA EXCLUSIVA PARA METAS 👇
+const ID_PLANILHA_METAS = "13loIiCcoWr2x-S8i1nD-EmCoUsNLmj3JoXNxW1cHr24";
 
 // Controle de Versão do App (Mude sempre que enviar atualização)
-const APP_VERSION = "1.0.9";
+const APP_VERSION = "1.1.0";
 
 let usuarioLogado = localStorage.getItem('usuarioLogado');
 
@@ -26,7 +33,11 @@ let totalVendidoSessao = 0;
 let totalComissaoSessao = 0;
 let chartMensal = null;
 let chartVendedoras = null;
+let chartEmpresas = null;
+let chartEstados = null;
 let vendasGlobaisDash = []; // Memória para o Mini-CRM
+let metasDaEquipe = {}; // Armazena as metas carregadas
+let vendasMetas = { equipe: 0, porVendedora: {} }; // Armazena o progresso real das vendas para as metas
 
 // Configuração Global do Toast (Notificações não-intrusivas)
 const Toast = Swal.mixin({
@@ -40,6 +51,18 @@ const Toast = Swal.mixin({
         toast.addEventListener('mouseleave', Swal.resumeTimer)
     }
 });
+
+// Função utilitária para converter a Chave VAPID exigida pelos navegadores
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
 
 // Função utilitária Debounce: Otimiza performance segurando a execução de eventos repetitivos
 function debounce(func, wait) {
@@ -58,6 +81,9 @@ function unmaskValor(valStr) {
 
 // Função para criar o Hash da Senha (SHA-256)
 async function hashPassword(message) {
+    if (!crypto || !crypto.subtle) {
+        throw new Error("Criptografia indisponível. Requer HTTPS ou servidor local.");
+    }
     const msgUint8 = new TextEncoder().encode(message);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -103,19 +129,24 @@ function setAndLockVendedora(user) {
 
     // NOVO: Configura recursos de admin
     setupAdminFeatures(user);
+    carregarEMostrarMetas(); // Carrega as metas para todos os usuários
 }
 
 function setupAdminFeatures(user) {
     const userUpper = user.toUpperCase();
     const superAdmins = ['KAYK', 'JHONATA', 'DEBORA', 'FELIPE'];
+    const equipeRenata = ['RENATA', 'HOZANA', 'ISRAEL', 'ROSANGELA', 'SARA', 'VINICIUS'];
+    const equipeCarol  = ['CAROL', 'ALICE', 'CHARLENE', 'HEMILLY', 'MICHELLE'];
     const isSuperAdmin = superAdmins.includes(userUpper);
     const isAdmin = isSuperAdmin || ['RENATA', 'CAROL'].includes(userUpper);
 
     const painelPush = document.getElementById('painelAdminPush');
-    if (!painelPush) return;
+    const painelMetas = document.getElementById('adminMetasContainer');
 
     if (isAdmin) {
-        painelPush.classList.remove('hidden');
+        if (painelPush) painelPush.classList.remove('hidden');
+        if (painelMetas) painelMetas.classList.remove('hidden');
+
         const pushTargetSelect = document.getElementById('pushTarget');
         pushTargetSelect.innerHTML = ''; // Limpa opções
 
@@ -128,8 +159,16 @@ function setupAdminFeatures(user) {
             pushTargetSelect.add(new Option('Equipe Renata', 'equipe_renata'));
             pushTargetSelect.add(new Option('Equipe Carol', 'equipe_carol'));
         }
+        
+        const selectVendedoraMeta = document.getElementById('selectVendedoraMeta');
+        if (selectVendedoraMeta) {
+            selectVendedoraMeta.innerHTML = '<option value="">Selecione uma vendedora...</option>';
+            let equipeGerir = isSuperAdmin ? [...new Set([...equipeRenata, ...equipeCarol])].sort() : (userUpper === 'RENATA' ? equipeRenata : equipeCarol);
+            equipeGerir.forEach(v => selectVendedoraMeta.add(new Option(v, v)));
+        }
     } else {
-        painelPush.classList.add('hidden');
+        if (painelPush) painelPush.classList.add('hidden');
+        if (painelMetas) painelMetas.classList.add('hidden');
     }
 }
 
@@ -137,14 +176,22 @@ async function realizarLogin() {
     const user = document.getElementById('userLogin').value.trim().toUpperCase();
     const senhaRaw = document.getElementById('senhaLogin').value;
     
-    const senhaHash = await hashPassword(senhaRaw);
     const status = document.getElementById('loginStatus');
 
+    if (!user || !senhaRaw) {
+        status.innerText = "⚠️ Preencha usuário e senha!";
+        status.style.display = 'block';
+        status.style.color = 'orange';
+        return;
+    }
+
+    // Mensagem ANTES de tentar gerar o hash
     status.innerText = "⏳ Verificando na base de dados...";
     status.style.display = 'block';
     status.style.color = 'blue';
 
     try {
+        const senhaHash = await hashPassword(senhaRaw);
         const response = await fetch(URL_LOGIN_DB, {
             method: 'POST',
             body: JSON.stringify({ acao: "login", nome: user, senha: senhaHash })
@@ -162,7 +209,12 @@ async function realizarLogin() {
             status.style.color = 'red';
         }
     } catch (e) {
-        status.innerText = "❌ Erro de conexão!";
+            console.error(e);
+            if (e.message && e.message.includes("Criptografia")) {
+                status.innerText = "❌ Acesso negado: O sistema requer HTTPS ou Servidor Local.";
+            } else {
+                status.innerText = "❌ Erro de conexão!";
+            }
         status.style.color = 'red';
     }
 }
@@ -181,10 +233,12 @@ async function cadastrarNovoVendedor() {
     if (!nome || !senhaRaw) return Swal.fire('Atenção', 'Por favor, preencha nome e senha.', 'warning');
     
     btn.disabled = true;
-    btn.innerHTML = '💾 Salvando...';
-    const senhaHash = await hashPassword(senhaRaw);
+    btn.innerHTML = '⏳ Preparando...';
 
     try {
+        const senhaHash = await hashPassword(senhaRaw);
+        btn.innerHTML = '💾 Salvando...';
+
         const response = await fetch(URL_LOGIN_DB, {
             method: 'POST',
             body: JSON.stringify({ acao: "cadastrar", nome: nome, senha: senhaHash })
@@ -209,7 +263,12 @@ async function cadastrarNovoVendedor() {
             Swal.fire('Erro', 'Não foi possível realizar o cadastro. O usuário pode já existir.', 'error');
         }
     } catch (e) {
-        Swal.fire('Erro', 'Erro ao conectar com a planilha de acesso.', 'error');
+            console.error(e);
+            if (e.message && e.message.includes("Criptografia")) {
+                Swal.fire('Erro de Segurança', 'Seu navegador bloqueou o cadastro pois você abriu o arquivo direto do Windows. É necessário um servidor Web.', 'error');
+            } else {
+                Swal.fire('Erro', 'Erro ao conectar com a planilha de acesso.', 'error');
+            }
     } finally {
         btn.disabled = false;
         btn.innerHTML = '💾 Salvar Cadastro';
@@ -220,9 +279,14 @@ async function efetuarLogin() {
     const user = document.getElementById('selectUser').value;
     const senhaRaw = document.getElementById('senhaInput').value;
     
-    const senhaHash = await hashPassword(senhaRaw);
+    if (!senhaRaw) {
+        Swal.fire('Atenção', 'Preencha a senha!', 'warning');
+        return;
+    }
 
     try {
+        const senhaHash = await hashPassword(senhaRaw);
+
         const response = await fetch(URL_LOGIN_DB, {
             method: 'POST',
             body: JSON.stringify({ acao: "login", nome: user, senha: senhaHash })
@@ -235,7 +299,12 @@ async function efetuarLogin() {
             Swal.fire('Erro', "❌ Senha incorreta para " + user, 'error');
         }
     } catch (e) {
-        Swal.fire('Erro', "Erro ao validar login no banco de dados.", 'error');
+            console.error(e);
+            if (e.message && e.message.includes("Criptografia")) {
+                Swal.fire('Erro de Segurança', 'Seu navegador bloqueou o login pois você abriu o arquivo direto do PC.', 'error');
+            } else {
+                Swal.fire('Erro', "Erro ao validar login no banco de dados.", 'error');
+            }
     }
 }
 
@@ -305,23 +374,27 @@ function alternarTela(tela) {
     const telaFor = document.getElementById('telaFornecedores');
     const telaPlan = document.getElementById('telaPlanilhas');
     const telaConfig = document.getElementById('telaConfig');
+    const telaMetas = document.getElementById('telaMetas');
     const navDash = document.getElementById('navDashboard');
     const navCom = document.getElementById('navComissoes');
     const navFor = document.getElementById('navFornecedores');
     const navPlan = document.getElementById('navPlanilhas');
     const navConfig = document.getElementById('navConfig');
+    const navMetas = document.getElementById('navMetas');
 
     if (telaDash) telaDash.classList.add('hidden');
     telaCom.classList.add('hidden');
     telaFor.classList.add('hidden');
     telaPlan.classList.add('hidden');
     if (telaConfig) telaConfig.classList.add('hidden');
+    if (telaMetas) telaMetas.classList.add('hidden');
     
     if (navDash) navDash.classList.remove('active');
     navCom.classList.remove('active');
     navFor.classList.remove('active');
     navPlan.classList.remove('active');
     if (navConfig) navConfig.classList.remove('active');
+    if (navMetas) navMetas.classList.remove('active');
 
     if (tela === 'dashboard') {
         if (telaDash) telaDash.classList.remove('hidden');
@@ -331,6 +404,8 @@ function alternarTela(tela) {
         setTimeout(() => {
             if (chartMensal) { chartMensal.resize(); chartMensal.update(); }
             if (chartVendedoras) { chartVendedoras.resize(); chartVendedoras.update(); }
+            if (chartEmpresas) { chartEmpresas.resize(); chartEmpresas.update(); }
+            if (chartEstados) { chartEstados.resize(); chartEstados.update(); }
         }, 150);
     } else if (tela === 'comissoes') {
         telaCom.classList.remove('hidden'); navCom.classList.add('active');
@@ -341,6 +416,10 @@ function alternarTela(tela) {
     } else if (tela === 'config') {
         if (telaConfig) telaConfig.classList.remove('hidden');
         if (navConfig) navConfig.classList.add('active');
+    } else if (tela === 'metas') {
+        if (telaMetas) telaMetas.classList.remove('hidden');
+        if (navMetas) navMetas.classList.add('active');
+        atualizarTelaMetas();
     }
 }
 
@@ -477,6 +556,7 @@ async function salvarComissao() {
     const porcVend = parseFloat(document.getElementById('porcVend').value) || 0;
     const totalNfVal = valorNota + valorFora;
     const nomeCliente = document.getElementById('cliente').value || "CLIENTE NÃO INFORMADO";
+    const cidadeUf = document.getElementById('cidadeUfCliente').value || "N/A";
     const divisao = document.getElementById('divisao').value;
     const empresaSelecionada = document.getElementById('empresaSelecionada').value;
 
@@ -487,6 +567,7 @@ async function salvarComissao() {
         dataEmissao: new Date().toLocaleDateString('pt-BR'),
         cfop: "5102",
         razaoSocial: nomeCliente,
+        cidadeUf: cidadeUf,
         statusInterno: "Impressa",
         totalNf: valorNota,
         fcp: 0, icmsSt: 0, totalOs: 0,
@@ -527,6 +608,7 @@ async function salvarComissao() {
         document.getElementById('valorNota').value = "";
         document.getElementById('valorFora').value = "";
         document.getElementById('cliente').value = "";
+        document.getElementById('cidadeUfCliente').value = "";
         calcularComissaoRealTime();
         limparRascunhoVenda();
         btn.disabled = false;
@@ -557,6 +639,17 @@ async function salvarComissao() {
         totalVendidoSessao += totalNfVal;
         totalComissaoSessao += valorComissao;
         
+        // NOVO: Adiciona a venda na memória de metas para atualizar as barras instantaneamente
+        if (!vendasMetas.porVendedora[vendedora]) {
+            vendasMetas.porVendedora[vendedora] = { diaria: 0, semanal: 0, mensal: 0 };
+        }
+        vendasMetas.porVendedora[vendedora].diaria += totalNfVal;
+        vendasMetas.porVendedora[vendedora].semanal += totalNfVal;
+        vendasMetas.porVendedora[vendedora].mensal += totalNfVal;
+        vendasMetas.equipe += totalNfVal;
+        atualizarBarraDeProgresso();
+        atualizarTelaMetas();
+
         // Atualiza os novos Cards de KPI
         if (document.getElementById('kpiFaturamento')) {
             document.getElementById('kpiFaturamento').innerText = totalVendidoSessao.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -584,6 +677,7 @@ async function salvarComissao() {
         document.getElementById('valorNota').value = "";
         document.getElementById('valorFora').value = "";
         document.getElementById('cliente').value = "";
+        document.getElementById('cidadeUfCliente').value = "";
         calcularComissaoRealTime(); // Zera o preview na tela
         limparRascunhoVenda(); // Limpa o rascunho pós sucesso
 
@@ -623,6 +717,7 @@ function editarVendaSessao(payloadStr) {
             }
             
             document.getElementById('cliente').value = data.razaoSocial || "";
+            document.getElementById('cidadeUfCliente').value = data.cidadeUf || "";
             document.getElementById('divisao').value = data.divisao || "100% - SEM DIVISÃO";
             document.getElementById('porcVend').value = data.porcentagemComissao || "";
             
@@ -852,6 +947,8 @@ function toggleDarkMode() {
         chartMensal.update();
     }
     if (chartVendedoras) chartVendedoras.update();
+    if (chartEmpresas) chartEmpresas.update();
+    if (chartEstados) chartEstados.update();
     
     if (!document.getElementById('telaDashboard').classList.contains('hidden')) carregarDashboardReal();
 }
@@ -909,7 +1006,7 @@ async function verificarAtualizacaoManual() {
 
 // --- AUTO-SAVE (Salva-Vidas) ---
 function salvarRascunhoVenda() {
-    const campos = ['empresaSelecionada', 'equipe', 'vendedora', 'tipoVendedora', 'tipoVenda', 'nomeRepresentante', 'tipoRepresentante', 'porcRep', 'cliente', 'valorNota', 'valorFora', 'divisao', 'porcVend'];
+    const campos = ['empresaSelecionada', 'equipe', 'vendedora', 'tipoVendedora', 'tipoVenda', 'nomeRepresentante', 'tipoRepresentante', 'porcRep', 'cliente', 'cidadeUfCliente', 'valorNota', 'valorFora', 'divisao', 'porcVend'];
     const rascunho = {};
     campos.forEach(id => {
         const el = document.getElementById(id);
@@ -1058,9 +1155,16 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    initOneSignal(); // Inicia o motor de mensagens
     // Checa o status da inscrição Push ao carregar a página
     checkPushSubscription();
+
+    // Ouve mensagens vindo do Service Worker (Notificação chegou) para atualizar o Sininho
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'PUSH_RECEIVED') {
+            salvarNotificacaoLocal(event.data.payload);
+            Toast.fire({ icon: 'info', title: 'Você tem uma nova mensagem!' });
+        }
+    });
 });
 
 async function carregarDashboardReal() {
@@ -1107,11 +1211,11 @@ async function carregarDashboardReal() {
         delete window.callbackDashReal;
         
         // Pela ordem que você salva os dados no Apps Script, as posições das colunas começam em 0:
-        let colMes = 13;      // Mês
-        let colVend = 16;     // Vendedora
+        let colMes = 14;      // Mês
+        let colVend = 17;     // Vendedora
         let colCli = 5;       // Razão Social do Cliente
-        let colTotal = 11;    // Total do Pedido
-        let colComissao = 25; // Valor da Comissão (a última da sua lista)
+        let colTotal = 12;    // Total do Pedido
+        let colComissao = 26; // Valor da Comissão (a última da sua lista)
 
         vendasGlobaisDash = data.table.rows || []; // Salva pro Mini-CRM
 
@@ -1157,6 +1261,13 @@ async function carregarDashboardReal() {
         let comissaoLiquida = 0;
         let clientesMemoria = new Set(); // Memória para o Autocompletar
         
+        let hoje = new Date();
+        let inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+        let inicioSemana = new Date(inicioHoje);
+        inicioSemana.setDate(inicioHoje.getDate() - inicioHoje.getDay());
+        let inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        vendasMetas = { equipe: 0, porVendedora: {} };
+
         // Variáveis para Comparação de Mês Anterior
         const isAnoInteiro = mesAtual === "ANO INTEIRO";
         const mesesRef = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
@@ -1209,9 +1320,24 @@ async function carregarDashboardReal() {
             let rowCli = row.c[colCli] && row.c[colCli].v ? String(row.c[colCli].v).trim() : "";
             if (rowCli && rowCli !== "N/A") clientesMemoria.add(rowCli);
 
+            let rawTotalGeral = row.c[colTotal] ? row.c[colTotal].v : 0;
+            let valTotalGeral = typeof rawTotalGeral === 'number' ? rawTotalGeral : parseFloat(String(rawTotalGeral).replace(',', '.')) || 0;
+
+            if (rowDate && valTotalGeral > 0) {
+                let isEquipeValid = isSuperAdmin || (userLogadoUpper === 'RENATA' && equipeRenata.includes(rowVend)) || (userLogadoUpper === 'CAROL' && equipeCarol.includes(rowVend)) || rowVend === userLogadoUpper;
+                if (isEquipeValid) {
+                    if (!vendasMetas.porVendedora[rowVend]) vendasMetas.porVendedora[rowVend] = { diaria: 0, semanal: 0, mensal: 0 };
+                    if (rowDate >= inicioMes) {
+                        vendasMetas.porVendedora[rowVend].mensal += valTotalGeral;
+                        vendasMetas.equipe += valTotalGeral;
+                    }
+                    if (rowDate >= inicioSemana) { vendasMetas.porVendedora[rowVend].semanal += valTotalGeral; }
+                    if (rowDate >= inicioHoje) { vendasMetas.porVendedora[rowVend].diaria += valTotalGeral; }
+                }
+            }
+
             if (isDateValid && isVendaValida) {
-                let rawTotal = row.c[colTotal] ? row.c[colTotal].v : 0;
-                let valTotal = typeof rawTotal === 'number' ? rawTotal : parseFloat(String(rawTotal).replace(',', '.')) || 0;
+                let valTotal = valTotalGeral;
                 let rawCom = row.c[colComissao] ? row.c[colComissao].v : 0;
                 let valComissao = typeof rawCom === 'number' ? rawCom : parseFloat(String(rawCom).replace(',', '.')) || 0;
                 
@@ -1271,21 +1397,25 @@ async function carregarDashboardReal() {
 
         // Envia os dados para renderizar os gráficos E a tabela
         renderizarDashAvancado(data.table.rows, mesAtual, anoAtual, colVend, colTotal, 0, colCli, vendedoraLogada, valInicio, valFim, fVend, colComissao); 
+        atualizarBarraDeProgresso(); // Atualiza a barra de metas com o faturamento calculado
+        atualizarTelaMetas();
     };
 
     const script = document.createElement('script');
     script.id = 'scriptGvizDash';
     script.src = url;
     script.onerror = () => {
-        document.getElementById('scriptGvizDash')?.remove();
+        document.getElementById('scriptGvizDash') ?.remove();
         delete window.callbackDashReal;
         console.warn("Erro ao puxar dados do Dashboard.");
-        if (!chartMensal) renderizarDashAvancado([], mesAtual, anoAtual, 16, 11, 0, 5, vendedoraLogada, valInicio, valFim, fVend, 25);
+        if (!chartMensal) renderizarDashAvancado([], mesAtual, anoAtual, 17, 12, 0, 5, vendedoraLogada, valInicio, valFim, fVend, 26);
+        atualizarBarraDeProgresso();
+        atualizarTelaMetas();
     };
     document.body.appendChild(script);
 }
 
-function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, colEmpresa, colCli, vendedoraLogada, valInicio, valFim, fVend, colComissao = 25) {
+function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, colEmpresa, colCli, vendedoraLogada, valInicio, valFim, fVend, colComissao = 26) {
     const userLogadoUpper = (usuarioLogado || "").toUpperCase();
     const superAdmins = ['KAYK', 'JHONATA', 'DEBORA', 'FELIPE'];
     const isSuperAdmin = superAdmins.includes(userLogadoUpper);
@@ -1298,6 +1428,8 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
 
     Chart.defaults.color = isDark ? '#e0e0e0' : '#666';
 
+    const vendasPorEmpresa = {};
+    const valorVendidoPorEstado = {};
     const vendasPorVendedora = {};
     const vendasPorCliente = {};
     const isAnoInteiro = mesAtual === "ANO INTEIRO";
@@ -1310,7 +1442,7 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
 
     for (let row of rows) {
         if(!row.c) continue;
-        let rowMes = row.c[13] && row.c[13].v ? String(row.c[13].v).toUpperCase().trim() : "";
+        let rowMes = row.c[14] && row.c[14].v ? String(row.c[14].v).toUpperCase().trim() : "";
 
         let dataEmissao = row.c[3] && row.c[3].f ? String(row.c[3].f) : (row.c[3] && row.c[3].v ? String(row.c[3].v).substring(0, 10) : "N/A");
         let vendedora = row.c[colVend] && row.c[colVend].v ? String(row.c[colVend].v).toUpperCase() : "N/A";
@@ -1365,6 +1497,22 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
                     if(diaVenda >= 1 && diaVenda <= 31) faturamentoAtual[diaVenda - 1] += total;
                 }
                 
+                // Para o gráfico de Vendas por Empresa (contagem)
+                vendasPorEmpresa[empresa] = (vendasPorEmpresa[empresa] || 0) + 1;
+
+                // Para o gráfico de Top Estados (valor)
+                // Agora o sistema lê a coluna 7 (índice 6) que foi adicionada para Cidade/UF.
+                // O formato esperado é "NOME DA CIDADE - UF".
+                const colCidadeUF = 6; 
+                const cidadeUfStr = row.c[colCidadeUF] && row.c[colCidadeUF].v ? String(row.c[colCidadeUF].v) : "";
+                if (cidadeUfStr.includes('-')) {
+                    const uf = cidadeUfStr.split('-').pop().trim().toUpperCase();
+                    if (uf.length === 2) { // Validação simples de UF (ex: SP, RJ)
+                        valorVendidoPorEstado[uf] = (valorVendidoPorEstado[uf] || 0) + total;
+                    }
+                }
+
+
                 // ... [O resto do IF continua igual preenchendo as tabelas]
             }
 
@@ -1511,6 +1659,298 @@ function renderizarDashAvancado(rows, mesAtual, anoAtual, colVend, colTotal, col
             } 
         }
     });
+
+    // GRÁFICO DE VENDAS POR EMPRESA
+    const ctxEmpresas = document.getElementById('graficoEmpresas').getContext('2d');
+    if (chartEmpresas) chartEmpresas.destroy();
+    chartEmpresas = new Chart(ctxEmpresas, {
+        type: 'pie',
+        data: {
+            labels: Object.keys(vendasPorEmpresa).length > 0 ? Object.keys(vendasPorEmpresa) : ['Sem dados'],
+            datasets: [{
+                label: '# de Vendas',
+                data: Object.keys(vendasPorEmpresa).length > 0 ? Object.values(vendasPorEmpresa) : [1],
+                backgroundColor: ['#d81b60', '#8e44ad', '#2980b9', '#f1c40f', '#27ae60'],
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    // GRÁFICO DE TOP 5 ESTADOS
+    const topEstadosData = Object.entries(valorVendidoPorEstado)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5);
+    
+    const ctxEstados = document.getElementById('graficoEstados').getContext('2d');
+    if (chartEstados) chartEstados.destroy();
+    chartEstados = new Chart(ctxEstados, {
+        type: 'bar',
+        data: {
+            labels: topEstadosData.length > 0 ? topEstadosData.map(item => item[0]) : ['Sem dados'], // ['SP', 'RJ', ...]
+            datasets: [{
+                label: 'Valor Vendido (R$)',
+                data: topEstadosData.length > 0 ? topEstadosData.map(item => item[1]) : [0], // [10000, 8000, ...]
+                backgroundColor: '#17a2b8'
+            }]
+        },
+        options: {
+            indexAxis: 'y', // Gráfico de barras horizontais
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    grid: { color: isDark ? '#444' : '#eee' },
+                    ticks: {
+                        callback: function(value) {
+                            return 'R$ ' + value.toLocaleString('pt-BR');
+                        }
+                    }
+                },
+                y: { grid: { color: isDark ? '#444' : '#eee' } }
+            }
+        }
+    });
+}
+
+// --- NOVO SISTEMA DE METAS ---
+
+function carregarEMostrarMetas() {
+    // A leitura de metas foi alterada para usar a API GVIZ, que é mais estável e contorna
+    // problemas de CORS que o método anterior (fetch direto) causava.
+    // O App Script (URL_METAS_DB) ainda é usado para SALVAR as metas.
+
+    if (!ID_PLANILHA_METAS || ID_PLANILHA_METAS.includes("COLOQUE_AQUI")) {
+        console.warn("O ID da planilha de metas é necessário para carregar as metas.");
+        return;
+    }
+
+    const sheetName = "Metas";
+    const query = "SELECT *"; // Puxa tudo para evitar erro se a planilha não tiver todas as colunas
+
+    const url = `https://docs.google.com/spreadsheets/d/${ID_PLANILHA_METAS}/gviz/tq?tqx=out:json;responseHandler:callbackMetas&headers=1&sheet=${sheetName}&tq=${encodeURIComponent(query)}&nocache=${new Date().getTime()}`;
+
+    window.callbackMetas = (data) => {
+        document.getElementById('scriptGvizMetas')?.remove();
+        delete window.callbackMetas;
+
+        // NOVO: Checa se a API do Google retornou um erro (ex: planilha não compartilhada)
+        if (data.status === 'error') {
+            console.error("Erro GVIZ ao buscar metas:", data.errors);
+            Swal.fire('Erro ao Carregar Metas', 'Não foi possível ler os dados da aba "Metas". Verifique se o nome da aba está correto e se a planilha está compartilhada como "Qualquer pessoa com o link pode ver".', 'error');
+            metasDaEquipe = {}; // Garante que as metas fiquem vazias
+            return;
+        }
+
+        const newMetas = {};
+        if (data && data.table && data.table.rows) {
+            data.table.rows.forEach(row => {
+                if (row.c && row.c[0] && row.c[0].v) {
+                    const vendedora = String(row.c[0].v).toUpperCase();
+                    const diaria = row.c[1] ? (row.c[1].v || 0) : 0;
+                    const semanal = row.c[2] ? (row.c[2].v || 0) : 0;
+                    const mensal = row.c[3] ? (row.c[3].v || 0) : 0;
+                    newMetas[vendedora] = { diaria, semanal, mensal };
+                }
+            });
+        }
+        metasDaEquipe = newMetas;
+
+        // Após carregar as metas, atualizamos a UI
+        atualizarBarraDeProgresso();
+        atualizarTelaMetas();
+    };
+
+    const script = document.createElement('script');
+    script.id = 'scriptGvizMetas';
+    script.src = url;
+    script.onerror = () => {
+        document.getElementById('scriptGvizMetas')?.remove();
+        delete window.callbackMetas;
+        console.error("Erro ao carregar metas da planilha via GVIZ.");
+    };
+    document.body.appendChild(script);
+}
+
+function atualizarBarraDeProgresso() {
+    let vendedoraLogada = (usuarioLogado || "").toUpperCase();
+    
+    // Respeitar o filtro de vendedora do dashboard (se visível e não for "TODAS")
+    const filtroVendDash = document.getElementById('filtroVendedoraDash');
+    if (filtroVendDash && filtroVendDash.style.display !== 'none' && filtroVendDash.value !== 'TODAS') {
+        vendedoraLogada = filtroVendDash.value;
+    }
+
+    if (!vendedoraLogada) return;
+
+    const metaInfo = metasDaEquipe[vendedoraLogada];
+    const metaMensal = metaInfo ? metaInfo.mensal : 0;
+
+    const container = document.getElementById('goalProgressContainer');
+    if (!container) return;
+
+    if (metaMensal > 0) {
+        container.classList.remove('hidden');
+        const minhasVendas = vendasMetas.porVendedora[vendedoraLogada] || { mensal: 0 };
+        const faturamentoAtual = minhasVendas.mensal; 
+
+        const porcentagem = Math.min((faturamentoAtual / metaMensal) * 100, 100);
+
+        document.getElementById('goalValues').innerText = `${faturamentoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} / ${metaMensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`;
+        const progressBar = document.getElementById('goalProgressBar');
+        const percentageText = document.getElementById('goalPercentageText');
+        const completionText = document.getElementById('goalCompletionText');
+
+        progressBar.style.width = `${porcentagem}%`;
+        percentageText.innerText = `${porcentagem.toFixed(1)}%`;
+
+        if (porcentagem >= 100) {
+            completionText.innerText = "🎉 PARABÉNS! Meta batida! 🎉";
+            completionText.style.display = 'block';
+        } else {
+            completionText.style.display = 'none';
+        }
+
+    } else {
+        container.classList.add('hidden'); // Esconde a barra se não houver meta definida
+    }
+}
+
+function atualizarTelaMetas() {
+    const userUpper = (usuarioLogado || "").toUpperCase();
+    if (!userUpper) return;
+    
+    let vendedoraAlvo = userUpper;
+    const selectAdmin = document.getElementById('selectVendedoraMeta');
+    
+    // Se a gerente selecionou alguém, muda as barras principais para focar nela
+    if (selectAdmin && selectAdmin.value && !document.getElementById('adminMetasContainer').classList.contains('hidden')) {
+        vendedoraAlvo = selectAdmin.value;
+        const h3 = document.querySelector('#minhasMetasContainer h3');
+        if (h3) h3.innerText = 'Metas de: ' + vendedoraAlvo;
+    } else {
+        const h3 = document.querySelector('#minhasMetasContainer h3');
+        if (h3) h3.innerText = 'Minhas Metas';
+    }
+    
+    const minhasMetas = metasDaEquipe[vendedoraAlvo] || { diaria: 0, semanal: 0, mensal: 0 };
+    const minhasVendas = vendasMetas.porVendedora[vendedoraAlvo] || { diaria: 0, semanal: 0, mensal: 0 };
+    
+    atualizarBarraUI('progMetaDiaria', 'valMetaDiaria', minhasVendas.diaria, minhasMetas.diaria);
+    atualizarBarraUI('progMetaSemanal', 'valMetaSemanal', minhasVendas.semanal, minhasMetas.semanal);
+    atualizarBarraUI('progMetaMensal', 'valMetaMensal', minhasVendas.mensal, minhasMetas.mensal);
+    
+    const metaEq = metasDaEquipe["EQUIPE_GERAL"] ? metasDaEquipe["EQUIPE_GERAL"].mensal : 0;
+    atualizarBarraUI('progMetaEquipe', 'valMetaEquipe', vendasMetas.equipe, metaEq);
+    
+    const adminContainer = document.getElementById('listaDesempenhoEquipe');
+    if (adminContainer && !document.getElementById('adminMetasContainer').classList.contains('hidden')) {
+        let html = '';
+        const equipeSelect = document.getElementById('selectVendedoraMeta');
+        for (let i = 1; i < equipeSelect.options.length; i++) {
+            let vend = equipeSelect.options[i].value;
+            let m = metasDaEquipe[vend] || { mensal: 0 };
+            let v = vendasMetas.porVendedora[vend] || { mensal: 0 };
+            let pct = m.mensal > 0 ? Math.min((v.mensal / m.mensal) * 100, 100).toFixed(1) : 0;
+            html += `
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-bottom: 5px;">
+                        <span>${vend}</span>
+                        <span>${v.mensal.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})} / ${(m.mensal || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}</span>
+                    </div>
+                    <div class="progress-bar-background" style="height: 15px;">
+                        <div class="progress-bar-foreground" style="width: ${pct}%; background: ${pct >= 100 ? '#28a745' : '#3498db'}; font-size: 10px;">${pct}%</div>
+                    </div>
+                </div>
+            `;
+        }
+        adminContainer.innerHTML = html || '<p>Nenhum dado encontrado.</p>';
+    }
+}
+
+function atualizarBarraUI(idProg, idVal, atual, meta) {
+    const elProg = document.getElementById(idProg);
+    const elVal = document.getElementById(idVal);
+    if (!elProg || !elVal) return;
+    elVal.innerText = `${atual.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})} / ${(meta || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}`;
+    let pct = meta > 0 ? Math.min((atual / meta) * 100, 100) : 0;
+    elProg.style.width = `${pct}%`;
+    elProg.innerText = `${pct.toFixed(1)}%`;
+    elProg.style.background = (pct >= 100 && meta > 0) ? '#28a745' : '';
+}
+
+function carregarMetaFormulario() {
+    const vendedora = document.getElementById('selectVendedoraMeta').value;
+    if (!vendedora) {
+        document.getElementById('inputMetaDiaria').value = '';
+        document.getElementById('inputMetaSemanal').value = '';
+        document.getElementById('inputMetaMensal').value = '';
+        atualizarTelaMetas();
+        return;
+    }
+    const m = metasDaEquipe[vendedora] || { diaria: 0, semanal: 0, mensal: 0 };
+    document.getElementById('inputMetaDiaria').value = m.diaria || '';
+    document.getElementById('inputMetaSemanal').value = m.semanal || '';
+    document.getElementById('inputMetaMensal').value = m.mensal || '';
+    const mEq = metasDaEquipe["EQUIPE_GERAL"] || { mensal: 0 };
+    document.getElementById('inputMetaEquipe').value = mEq.mensal || '';
+    
+    atualizarTelaMetas(); // Força a atualização do visual ao trocar no campo
+}
+
+async function salvarMetasIndividuais() {
+    const vendedora = document.getElementById('selectVendedoraMeta').value;
+    if(!vendedora) { Swal.fire('Atenção', 'Selecione uma vendedora!', 'warning'); return; }
+
+    const diaria = parseFloat(document.getElementById('inputMetaDiaria').value) || 0;
+    const semanal = parseFloat(document.getElementById('inputMetaSemanal').value) || 0;
+    const mensal = parseFloat(document.getElementById('inputMetaMensal').value) || 0;
+    const equipe = parseFloat(document.getElementById('inputMetaEquipe').value) || 0;
+
+    Swal.fire({ title: 'Salvando...', html: 'Atualizando metas na planilha...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    try {
+        const response = await fetch(URL_METAS_DB, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ 
+                acao: "salvarMetasAvancado", 
+                vendedora: vendedora, 
+                diaria: diaria, 
+                semanal: semanal, 
+                mensal: mensal, 
+                equipe: equipe 
+            })
+        });
+        
+        const resText = await response.text();
+        if (!resText.includes("Sucesso")) {
+            throw new Error("Erro na Planilha");
+        }
+        
+        if(!metasDaEquipe[vendedora]) metasDaEquipe[vendedora] = {};
+        metasDaEquipe[vendedora].diaria = diaria;
+        metasDaEquipe[vendedora].semanal = semanal;
+        metasDaEquipe[vendedora].mensal = mensal;
+        if(!metasDaEquipe["EQUIPE_GERAL"]) metasDaEquipe["EQUIPE_GERAL"] = {};
+        metasDaEquipe["EQUIPE_GERAL"].mensal = equipe;
+        
+        atualizarBarraDeProgresso();
+        atualizarTelaMetas();
+        Swal.fire('Sucesso!', 'Metas salvas!', 'success');
+    } catch (e) {
+        Swal.fire('Erro!', 'Não foi possível salvar as metas.', 'error');
+    }
 }
 
 // --- LÓGICA DO MINI-CRM (FICHA DO CLIENTE) ---
@@ -1528,7 +1968,7 @@ function abrirFichaCliente(nomeClienteLimpo) {
         let rowCli = row.c[5] && row.c[5].v ? String(row.c[5].v).toUpperCase().trim() : "";
         if (rowCli.includes(nomeBusca)) {
             let dataEmissao = row.c[3] && row.c[3].f ? String(row.c[3].f) : (row.c[3] && row.c[3].v ? String(row.c[3].v).substring(0, 10) : "N/A");
-            let rawTotal = row.c[11] ? row.c[11].v : 0;
+            let rawTotal = row.c[12] ? row.c[12].v : 0;
             let valTotal = typeof rawTotal === 'number' ? rawTotal : parseFloat(String(rawTotal).replace(',', '.')) || 0;
             
             totalGasto += valTotal;
@@ -1630,131 +2070,157 @@ async function compartilharReciboWhatsApp() {
 
 // --- LÓGICA PARA NOTIFICAÇÕES PUSH ---
 
-function initOneSignal() {
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.init({
-            appId: ONESIGNAL_APP_ID,
-            notifyButton: { enable: false },
-        });
-
-        // Intercepta a notificação e joga para o nosso "Sininho" do aplicativo
-        OneSignal.Notifications.addEventListener('foregroundWillDisplay', function(event) {
-            const notif = event.notification;
-            salvarNotificacaoLocal({ title: notif.title, body: notif.body });
-            Toast.fire({ icon: 'info', title: 'Você tem uma nova mensagem!' });
-        });
-    });
-}
-
 async function subscribeUserToPush() {
     const pushStatus = document.getElementById('pushStatus');
     const pushButton = document.getElementById('btnHabilitarPush');
-
-    window.OneSignalDeferred.push(async function(OneSignal) {
+ 
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        pushStatus.innerText = 'Push notifications não suportadas neste navegador.';
+        return;
+    }
+ 
+    try {
         pushStatus.innerText = 'Solicitando permissão...';
-        await OneSignal.Notifications.requestPermission();
-        
-        if (OneSignal.Notifications.permission === true) {
+        const permission = await Notification.requestPermission();
+ 
+        if (permission === 'granted') {
+            const registration = await navigator.serviceWorker.ready;
+ 
+            // Pega (ou reutiliza) a inscrição gerada para esse dispositivo
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+ 
             pushStatus.innerText = 'Você está inscrito para receber notificações!';
             pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
             pushButton.disabled = true;
             Toast.fire({ icon: 'success', title: 'Notificações habilitadas!' });
-            
-            tagOneSignalUser(usuarioLogado); // Classifica a vendedora na equipe dela
+ 
+            // ✅ Salva a inscrição diretamente no Flask (não mais no Apps Script)
+            await salvarInscricaoNoBackend(subscription, usuarioLogado);
+ 
         } else {
             pushStatus.innerText = 'Permissão negada pelo navegador.';
             pushButton.disabled = false;
         }
-    });
+    } catch (error) {
+        pushStatus.innerText = 'Erro ao se inscrever. Verifique se o app está em HTTPS.';
+        console.error('Falha Push Nativo:', error);
+    }
 }
-
-function tagOneSignalUser(user) {
-    if(!user) return;
-    const userUpper = user.toUpperCase();
-    const equipeRenata = ['RENATA', 'HOZANA', 'ISRAEL', 'ROSANGELA', 'SARA', 'VINICIUS'];
-    const equipeCarol  = ['CAROL', 'ALICE', 'CHARLENE', 'HEMILLY', 'MICHELLE'];
-    
-    window.OneSignalDeferred.push(async function(OneSignal) {
-        if (equipeRenata.includes(userUpper)) {
-            OneSignal.User.addTag("equipe", "equipe_renata");
-        } else if (equipeCarol.includes(userUpper)) {
-            OneSignal.User.addTag("equipe", "equipe_carol");
+ 
+async function salvarInscricaoNoBackend(subscription, user) {
+    // ✅ Chamada direta ao Flask com modo padrão (não 'no-cors')
+    //    O Flask tem CORS habilitado, então isso funciona corretamente.
+    try {
+        const response = await fetch(`${URL_FLASK}/salvar-inscricao`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nome: user,
+                subscription: subscription
+            })
+        });
+ 
+        if (!response.ok) {
+            const err = await response.json();
+            console.error("Servidor recusou a inscrição:", err);
+        } else {
+            console.log("Inscrição salva com sucesso no servidor.");
         }
-    });
+    } catch (e) {
+        console.error("Erro de conexão ao salvar inscrição:", e);
+    }
 }
-
+ 
 async function checkPushSubscription() {
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    window.OneSignalDeferred.push(async function(OneSignal) {
-        if (OneSignal.Notifications.permission === true) {
-            const pushButton = document.getElementById('btnHabilitarPush');
-            const pushStatus = document.getElementById('pushStatus');
-            if (pushButton && pushStatus) {
-                pushStatus.innerText = 'Você já está recebendo notificações.';
-                pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
-                pushButton.disabled = true;
-            }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+ 
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+ 
+    if (subscription) {
+        const pushButton = document.getElementById('btnHabilitarPush');
+        const pushStatus = document.getElementById('pushStatus');
+        if (pushButton && pushStatus) {
+            pushStatus.innerText = 'Você já está recebendo notificações.';
+            pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
+            pushButton.disabled = true;
         }
-    });
+        // ✅ Re-registra silenciosamente caso o servidor tenha reiniciado
+        //    (evita perder inscrições após restart do Flask)
+        salvarInscricaoNoBackend(subscription, usuarioLogado);
+    }
 }
-
+ 
 async function enviarNotificacaoPush() {
     const target = document.getElementById('pushTarget').value;
-    const title = document.getElementById('pushTitle').value;
-    const body = document.getElementById('pushBody').value;
-    const btn = document.querySelector('#painelAdminPush button');
-
+    const title  = document.getElementById('pushTitle').value;
+    const body   = document.getElementById('pushBody').value;
+    const btn    = document.querySelector('#painelAdminPush button');
+ 
     if (!body) {
         Swal.fire('Atenção', 'A mensagem não pode estar vazia.', 'warning');
         return;
     }
-
+ 
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
-
+ 
     try {
-        const response = await fetch(URL_PUSH_BACKEND, {
+        // ✅ Chamada direta ao Flask, com leitura real da resposta
+        const response = await fetch(`${URL_FLASK}/enviar-push`, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-                acao: "sendMessage",
-                messagePayload: { target, title, body, url: "/" }
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target, title, body, url: '/' })
         });
-        const result = await response.text();
-        Swal.fire('Sucesso!', result, 'success');
-        document.getElementById('pushBody').value = '';
+ 
+        const resultado = await response.json();
+ 
+        if (response.ok) {
+            const enviados = resultado.resultado?.enviados?.length || 0;
+            const falhas   = resultado.resultado?.falhas?.length || 0;
+            Swal.fire(
+                'Mensagem Enviada!',
+                `Entregue para ${enviados} dispositivo(s).${falhas > 0 ? ` ${falhas} falha(s).` : ''}`,
+                enviados > 0 ? 'success' : 'warning'
+            );
+        } else {
+            Swal.fire('Aviso', resultado.detalhe || 'Resposta inesperada do servidor.', 'warning');
+        }
+ 
+        document.getElementById('pushBody').value  = '';
         document.getElementById('pushTitle').value = '';
-
+ 
     } catch (error) {
-        Swal.fire('Erro!', 'Falha ao enviar a notificação. Verifique a conexão.', 'error');
+        Swal.fire('Erro de Conexão', 'Não foi possível contactar o servidor de notificações. Verifique se o Flask está rodando.', 'error');
         console.error("Erro ao enviar notificação:", error);
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Mensagem';
     }
 }
-
+ 
 // --- SISTEMA DE CAIXA DE MENSAGENS (IN-APP) ---
-
+ 
 function salvarNotificacaoLocal(payload) {
     let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
     notifs.unshift({
         title: payload.title || "Aviso Miss Rôse",
-        body: payload.body || "Você tem uma nova mensagem.",
-        date: new Date().toLocaleString('pt-BR'),
-        lida: false
+        body:  payload.body  || "Você tem uma nova mensagem.",
+        date:  new Date().toLocaleString('pt-BR'),
+        lida:  false
     });
     localStorage.setItem('appNotificacoes', JSON.stringify(notifs));
     atualizarBadgeNotificacoes();
 }
-
+ 
 function atualizarBadgeNotificacoes() {
     let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
     let naoLidas = notifs.filter(n => !n.lida).length;
     const badge = document.getElementById('badgeNotificacao');
-    
+ 
     if (badge) {
         if (naoLidas > 0) {
             badge.innerText = naoLidas > 9 ? "9+" : naoLidas;
@@ -1764,21 +2230,20 @@ function atualizarBadgeNotificacoes() {
         }
     }
 }
-
+ 
 function abrirPainelNotificacoes() {
     document.getElementById('modalNotificacoes').classList.remove('hidden');
     renderizarNotificacoes();
 }
-
+ 
 function fecharPainelNotificacoes() {
     document.getElementById('modalNotificacoes').classList.add('hidden');
-    // Marca todas como lidas ao fechar o painel
     let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
     notifs.forEach(n => n.lida = true);
     localStorage.setItem('appNotificacoes', JSON.stringify(notifs));
     atualizarBadgeNotificacoes();
 }
-
+ 
 function renderizarNotificacoes() {
     let notifs = JSON.parse(localStorage.getItem('appNotificacoes') || '[]');
     const container = document.getElementById('listaNotificacoesPainel');
@@ -1794,10 +2259,11 @@ function renderizarNotificacoes() {
         </div>
     `).join('');
 }
-
+ 
 function limparNotificacoes() {
     localStorage.setItem('appNotificacoes', '[]');
     renderizarNotificacoes();
     atualizarBadgeNotificacoes();
     Toast.fire({ icon: 'success', title: 'Caixa de entrada limpa!' });
 }
+ 
