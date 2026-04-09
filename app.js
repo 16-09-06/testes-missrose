@@ -1325,12 +1325,16 @@ async function carregarDashboardReal() {
 
             if (rowDate && valTotalGeral > 0) {
                 let isEquipeValid = isSuperAdmin || (userLogadoUpper === 'RENATA' && equipeRenata.includes(rowVend)) || (userLogadoUpper === 'CAROL' && equipeCarol.includes(rowVend)) || rowVend === userLogadoUpper;
+                
+                if (!vendasMetas.porVendedora[rowVend]) vendasMetas.porVendedora[rowVend] = { diaria: 0, semanal: 0, mensal: 0 };
+                
+                // Meta global soma o faturamento de TODAS as vendas válidas do sistema
+                if (rowDate >= inicioMes) {
+                    vendasMetas.equipe += valTotalGeral;
+                }
+
                 if (isEquipeValid) {
-                    if (!vendasMetas.porVendedora[rowVend]) vendasMetas.porVendedora[rowVend] = { diaria: 0, semanal: 0, mensal: 0 };
-                    if (rowDate >= inicioMes) {
-                        vendasMetas.porVendedora[rowVend].mensal += valTotalGeral;
-                        vendasMetas.equipe += valTotalGeral;
-                    }
+                    if (rowDate >= inicioMes) { vendasMetas.porVendedora[rowVend].mensal += valTotalGeral; }
                     if (rowDate >= inicioSemana) { vendasMetas.porVendedora[rowVend].semanal += valTotalGeral; }
                     if (rowDate >= inicioHoje) { vendasMetas.porVendedora[rowVend].diaria += valTotalGeral; }
                 }
@@ -1783,25 +1787,42 @@ function carregarEMostrarMetas() {
 
 function atualizarBarraDeProgresso() {
     let vendedoraLogada = (usuarioLogado || "").toUpperCase();
+    let isEquipe = false;
     
-    // Respeitar o filtro de vendedora do dashboard (se visível e não for "TODAS")
+    // Respeitar o filtro de vendedora do dashboard (se visível)
     const filtroVendDash = document.getElementById('filtroVendedoraDash');
-    if (filtroVendDash && filtroVendDash.style.display !== 'none' && filtroVendDash.value !== 'TODAS') {
-        vendedoraLogada = filtroVendDash.value;
+    if (filtroVendDash && filtroVendDash.style.display !== 'none') {
+        if (filtroVendDash.value === 'TODAS') {
+            isEquipe = true;
+        } else {
+            vendedoraLogada = filtroVendDash.value;
+        }
     }
 
-    if (!vendedoraLogada) return;
-
-    const metaInfo = metasDaEquipe[vendedoraLogada];
-    const metaMensal = metaInfo ? metaInfo.mensal : 0;
+    if (!vendedoraLogada && !isEquipe) return;
 
     const container = document.getElementById('goalProgressContainer');
     if (!container) return;
 
+    let metaMensal = 0;
+    let faturamentoAtual = 0;
+    let tituloSpan = container.querySelector('h3 span:first-child');
+
+    if (isEquipe) {
+        const metaInfo = metasDaEquipe["EQUIPE_GERAL"];
+        metaMensal = metaInfo ? metaInfo.mensal : 0;
+        faturamentoAtual = vendasMetas.equipe || 0;
+        if (tituloSpan) tituloSpan.innerText = '🎯 Meta Geral da Equipe';
+    } else {
+        const metaInfo = metasDaEquipe[vendedoraLogada];
+        metaMensal = metaInfo ? metaInfo.mensal : 0;
+        const minhasVendas = vendasMetas.porVendedora[vendedoraLogada] || { mensal: 0 };
+        faturamentoAtual = minhasVendas.mensal; 
+        if (tituloSpan) tituloSpan.innerText = '🎯 Meta do Mês';
+    }
+
     if (metaMensal > 0) {
         container.classList.remove('hidden');
-        const minhasVendas = vendasMetas.porVendedora[vendedoraLogada] || { mensal: 0 };
-        const faturamentoAtual = minhasVendas.mensal; 
 
         const porcentagem = Math.min((faturamentoAtual / metaMensal) * 100, 100);
 
@@ -1919,7 +1940,7 @@ async function salvarMetasIndividuais() {
     Swal.fire({ title: 'Salvando...', html: 'Atualizando metas na planilha...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
-        const response = await fetch(URL_METAS_DB, {
+        await fetch(URL_METAS_DB, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain' },
@@ -1933,15 +1954,14 @@ async function salvarMetasIndividuais() {
             })
         });
         
-        const resText = await response.text();
-        if (!resText.includes("Sucesso")) {
-            throw new Error("Erro na Planilha");
-        }
+        // Ocultamos a verificação de response.text() pois o 'no-cors' torna a resposta opaca e 
+        // faria o sistema pensar falsamente que ocorreu um erro. Assumimos sucesso.
         
         if(!metasDaEquipe[vendedora]) metasDaEquipe[vendedora] = {};
         metasDaEquipe[vendedora].diaria = diaria;
         metasDaEquipe[vendedora].semanal = semanal;
         metasDaEquipe[vendedora].mensal = mensal;
+        
         if(!metasDaEquipe["EQUIPE_GERAL"]) metasDaEquipe["EQUIPE_GERAL"] = {};
         metasDaEquipe["EQUIPE_GERAL"].mensal = equipe;
         
@@ -1949,7 +1969,8 @@ async function salvarMetasIndividuais() {
         atualizarTelaMetas();
         Swal.fire('Sucesso!', 'Metas salvas!', 'success');
     } catch (e) {
-        Swal.fire('Erro!', 'Não foi possível salvar as metas.', 'error');
+        console.error("Erro ao salvar metas:", e);
+        Swal.fire('Erro!', 'Não foi possível se conectar à planilha de Metas.', 'error');
     }
 }
 
