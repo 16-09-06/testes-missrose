@@ -179,6 +179,7 @@ function setupAdminFeatures(user) {
 async function realizarLogin() {
     const user = document.getElementById('userLogin').value.trim().toUpperCase();
     const senhaRaw = document.getElementById('senhaLogin').value;
+    const btn = document.querySelector('#formEntrar button');
     
     const status = document.getElementById('loginStatus');
 
@@ -189,10 +190,11 @@ async function realizarLogin() {
         return;
     }
 
-    // Mensagem ANTES de tentar gerar o hash
     status.innerText = "⏳ Verificando na base de dados...";
     status.style.display = 'block';
     status.style.color = 'blue';
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Aguarde...';
 
     try {
         const senhaHash = await hashPassword(senhaRaw);
@@ -223,6 +225,9 @@ async function realizarLogin() {
                 status.innerText = "❌ Erro de conexão!";
             }
         status.style.color = 'red';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🔓 Entrar no Sistema';
     }
 }
 
@@ -302,11 +307,15 @@ if (usuarioLogado) {
 async function efetuarLogin() {
     const user = document.getElementById('selectUser').value.trim().toUpperCase();
     const senhaRaw = document.getElementById('senhaInput').value;
+    const btn = document.querySelector('#camposLogin button');
     
     if (!senhaRaw) {
         Swal.fire('Atenção', 'Preencha a senha!', 'warning');
         return;
     }
+
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Aguarde...';
 
     try {
         const senhaHash = await hashPassword(senhaRaw);
@@ -336,6 +345,9 @@ async function efetuarLogin() {
             } else {
                 Swal.fire('Erro', "Erro ao validar login no banco de dados.", 'error');
             }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Entrar';
     }
 }
 
