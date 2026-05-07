@@ -22,7 +22,11 @@ self.addEventListener('install', (e) => {
     e.waitUntil(
         caches.open(CACHE_NAME)
         .then((cache) => {
+            console.log('[Service Worker] Fazendo cache do app shell');
             return cache.addAll(urlsToCache);
+        })
+        .catch(error => {
+            console.error('[Service Worker] Falha ao fazer cache do app shell:', error);
         })
     );
 });

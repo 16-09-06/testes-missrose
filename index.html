@@ -72,12 +72,6 @@
     <div class="container" style="max-width: 350px; border-top: none;">
         <img src="logo_missrose.png" style="width: 150px; margin-bottom: 20px; background: white; padding: 10px; border-radius: 10px;">
         
-        <!-- ABAS DE NAVEGAÇÃO -->
-        <div style="display: flex; gap: 10px; margin-bottom: 20px; width: 100%;">
-            <button id="btnTabEntrar" onclick="alternarAbaAuth('entrar')" style="flex: 1; padding: 10px; font-size: 14px;">Entrar</button>
-            <button id="btnTabCadastrar" onclick="alternarAbaAuth('cadastrar')" style="flex: 1; background: #ccc; color: #333; padding: 10px; font-size: 14px;">Cadastrar</button>
-        </div>
-
         <h2 id="tituloAuth" style="color: var(--primary); margin-bottom: 20px;">Acesso Restrito</h2>
         
         <!-- FORMULÁRIO DE LOGIN -->
@@ -90,18 +84,6 @@
                 <i class="fas fa-eye" id="toggleSenhaLogin" onclick="mostrarSenha('senhaLogin', 'toggleSenhaLogin')" style="position: absolute; right: 10px; top: 12px; cursor: pointer; color: #888;"></i>
             </div>
             <button onclick="realizarLogin()">🔓 Entrar no Sistema</button>
-        </div>
-
-        <!-- FORMULÁRIO DE CADASTRO -->
-        <div id="formCadastrar" class="hidden">
-            <label>Nome Completo:</label>
-            <input type="text" id="novoNome" placeholder="Ex: MARIA SILVA" oninput="this.value = this.value.toUpperCase()">
-            <label>Crie uma Senha:</label>
-            <div style="position: relative;">
-                <input type="password" id="novaSenha" placeholder="Mínimo 4 caracteres">
-                <i class="fas fa-eye" id="toggleNovaSenha" onclick="mostrarSenha('novaSenha', 'toggleNovaSenha')" style="position: absolute; right: 10px; top: 12px; cursor: pointer; color: #888;"></i>
-            </div>
-            <button onclick="cadastrarNovoVendedor()">💾 Salvar Cadastro</button>
         </div>
 
         <div id="loginStatus" style="color: red; font-size: 13px; margin-top: 10px; display: none;"></div>
@@ -196,6 +178,9 @@
         
         <select id="filtroVendedoraDash" onchange="carregarDashboardReal()" style="display: none; width: auto; margin: 0; padding: 8px 15px; border-radius: 8px; border: 1px solid var(--primary); background: #fff; font-weight: bold; color: var(--primary); cursor: pointer;">
             <option value="TODAS">Vendedoras (Todas)</option>
+        </select>
+        <select id="filtroRepresentanteDash" onchange="carregarDashboardReal()" style="display: none; width: auto; margin: 0; padding: 8px 15px; border-radius: 8px; border: 1px solid var(--primary); background: #fff; font-weight: bold; color: var(--primary); cursor: pointer;">
+            <option value="TODOS">Representantes (Todos)</option>
         </select>
     </div>
 
@@ -454,6 +439,9 @@
         <p><strong>Razão Social:</strong> <span id="resRazao"></span></p>
         <p><strong>CNPJ:</strong> <span id="resCnpj"></span></p>
         <p><strong>Cidade/UF:</strong> <span id="resCidade"></span></p>
+        <p><strong>Bairro:</strong> <span id="resBairro"></span></p>
+        <p><strong>Simples Nacional:</strong> <span id="resSimples" style="color: var(--primary); font-weight: bold;"></span></p>
+        <p><strong>Situação IE:</strong> <span id="resSitIE" style="font-weight: bold;"></span></p>
         
         <label>Telefone (Editável):</label>
         <input type="text" id="resTel" class="edit-field" placeholder="(XX) XXXXX-XXXX" maxlength="15">
@@ -626,10 +614,7 @@
         
         <div id="camposLogin">
             <label>Vendedora:</label>
-            <select id="selectUser">
-                <option value="Renata">Renata</option>
-                <option value="Carol">Carol</option>
-            </select>
+            <input type="text" id="selectUser" placeholder="Digite seu usuário..." oninput="this.value = this.value.toUpperCase()" onkeydown="if(event.key === 'Enter') efetuarLogin()">
 
             <label>Senha:</label>
             <div style="position: relative;">

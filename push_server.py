@@ -8,7 +8,7 @@ app = Flask(__name__)
  
 # ✅ CORS configurado EXATAMENTE para o seu GitHub Pages e para testes locais.
 # Impede que outros sites tentem usar sua API.
-CORS(app, origins=["https://16-09-06.github.io", "http://localhost:5000", "http://127.0.0.1:5000"])
+CORS(app, origins=["https://16-09-06.github.io", "http://localhost:5000", "http://127.0.0.1:5000" ,"https://miss-rose-rho.vercel.app/"])
  
 # ✅ Suas chaves VAPID — a chave privada é lida de variável de ambiente
 # para não ficar exposta no código. No seu servidor, execute:
@@ -68,6 +68,7 @@ def salvar_inscricao():
         return jsonify({"erro": "Campos 'nome' e 'subscription' são obrigatórios"}), 400
  
     subscriptions_db[nome] = subscription
+    salvar_banco(subscriptions_db) # Garante que a nova inscrição seja salva no arquivo
     print(f"[Push] Inscrição salva para: {nome}. Total inscritos: {len(subscriptions_db)}")
     return jsonify({"status": "sucesso", "usuario": nome}), 200
  
@@ -117,6 +118,7 @@ def enviar_push():
             if hasattr(ex, 'response') and ex.response and ex.response.status_code == 410:
                 print(f"[Push] Removendo inscrição expirada de {nome}")
                 del subscriptions_db[nome]
+                salvar_banco(subscriptions_db) # Garante que a remoção seja salva no arquivo
  
     return jsonify({"status": "sucesso", "resultado": resultados}), 200
  
