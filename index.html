@@ -563,6 +563,25 @@
         </button>
     </div>
 
+    <!-- PAINEL DE ALTERAR SENHA -->
+    <div class="result-box" style="margin-top: 20px; border-color: #ff9800;">
+        <h3 style="margin-top:0; color: #ff9800; display: flex; align-items: center; gap: 10px;"><i class="fas fa-key"></i> Alterar Minha Senha</h3>
+        
+        <label>Nova Senha:</label>
+        <div style="position: relative;">
+            <input type="password" id="configNovaSenha" placeholder="Mínimo 4 caracteres">
+            <i class="fas fa-eye" id="toggleConfigNovaSenha" onclick="mostrarSenha('configNovaSenha', 'toggleConfigNovaSenha')" style="position: absolute; right: 10px; top: 12px; cursor: pointer; color: #888;"></i>
+        </div>
+
+        <label>Confirmar Nova Senha:</label>
+        <div style="position: relative;">
+            <input type="password" id="configConfirmaSenha" placeholder="Repita a nova senha">
+            <i class="fas fa-eye" id="toggleConfigConfirmaSenha" onclick="mostrarSenha('configConfirmaSenha', 'toggleConfigConfirmaSenha')" style="position: absolute; right: 10px; top: 12px; cursor: pointer; color: #888;"></i>
+        </div>
+
+        <button id="btnAlterarSenhaConfig" onclick="alterarSenhaUsuario()" style="background: #ff9800;"><i class="fas fa-save"></i> Salvar Nova Senha</button>
+    </div>
+
     <!-- PAINEL DE ENVIO DE NOTIFICAÇÕES (SÓ PARA ADMINS) -->
     <div id="painelAdminPush" class="result-box hidden" style="margin-top: 20px; border-color: #8e44ad;">
         <h3 style="margin-top:0; color: #8e44ad; display: flex; align-items: center; gap: 10px;"><i class="fas fa-paper-plane"></i> Enviar Notificação Geral</h3>

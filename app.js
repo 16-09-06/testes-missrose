@@ -380,6 +380,52 @@ function efetuarLogout() {
     location.reload(); 
 }
 
+async function alterarSenhaUsuario() {
+    const novaSenha = document.getElementById('configNovaSenha').value;
+    const confirmaSenha = document.getElementById('configConfirmaSenha').value;
+    const btn = document.getElementById('btnAlterarSenhaConfig');
+
+    if (!novaSenha || !confirmaSenha) {
+        return Swal.fire('Atenção', 'Preencha todos os campos.', 'warning');
+    }
+    if (novaSenha.length < 4) {
+        return Swal.fire('Atenção', 'A senha deve ter no mínimo 4 caracteres.', 'warning');
+    }
+    if (novaSenha !== confirmaSenha) {
+        return Swal.fire('Atenção', 'As senhas não conferem.', 'warning');
+    }
+    if (novaSenha === APP_CONFIG.SENHA_PADRAO) {
+        return Swal.fire('Atenção', 'A nova senha não pode ser igual à senha padrão do sistema.', 'warning');
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+
+    try {
+        const senhaHash = await hashPassword(novaSenha);
+        const response = await fetch(URL_LOGIN_DB, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ acao: "alterarSenha", nome: usuarioLogado, senha: senhaHash })
+        });
+        const res = await response.text();
+
+        if (res === "Sucesso" || res.includes("ucesso") || res === "Autorizado") {
+            Swal.fire('Sucesso!', 'Sua senha foi alterada com sucesso.', 'success');
+            document.getElementById('configNovaSenha').value = '';
+            document.getElementById('configConfirmaSenha').value = '';
+        } else {
+            Swal.fire('Erro', 'Não foi possível alterar a senha. Tente novamente.', 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Erro', 'Falha na comunicação com o banco de dados.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Salvar Nova Senha';
+    }
+}
+
 const UIElements = {
     telas: {
         dashboard: document.getElementById('telaDashboard'),
