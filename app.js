@@ -1,3 +1,8 @@
+// ✅ Forçar HTTPS para garantir o funcionamento da Criptografia (Login)
+if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    location.replace(`https:${location.href.substring(location.protocol.length)}`);
+}
+
 // URLs das suas Planilhas
 const URL_COMISSOES = "https://script.google.com/macros/s/AKfycbxHovQbCHgl6L7AVOlz4bl1ih1Ncx1XgNgDW73ANmN21Z1oPpnyTIMY2tKj9NZdEqkb/exec";
 const URL_METAS_DB = "https://script.google.com/macros/s/AKfycbxcdOZ9Z7MctkvH3DE84s2l6jFJz6mPShv2oK3YrI0hbMK7OQt8YXPs0N9yQniM2axG/exec";
@@ -207,7 +212,7 @@ async function realizarLogin() {
         });
         const res = await response.text();
 
-        if (res === "Autorizado") {
+        if (res.trim().toLowerCase() === "autorizado") {    
             if (senhaRaw === APP_CONFIG.SENHA_PADRAO) {
                 forcarTrocaSenha(user, efetivarAcesso);
             } else {
@@ -276,6 +281,8 @@ async function forcarTrocaSenha(user, callbackSucesso) {
 
             const response = await fetch(URL_LOGIN_DB, {
                 method: 'POST',
+                // ✅ CABEÇALHO ADICIONADO: Previne que o celular bloqueie o primeiro acesso da vendedora!
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify({ acao: "alterarSenha", nome: user, senha: senhaHash })
             });
             const res = await response.text();
@@ -329,7 +336,7 @@ async function efetuarLogin() {
         });
         const resultado = await response.text();
 
-        if (resultado === "Autorizado") {
+        if (resultado.includes("Autorizado") || resultado.trim() === "Autorizado") {
             if (senhaRaw === APP_CONFIG.SENHA_PADRAO) {
                 forcarTrocaSenha(user, salvarSessao);
             } else {
@@ -2358,9 +2365,11 @@ async function checkPushSubscription() {
             pushButton.innerHTML = '<i class="fas fa-check-circle"></i> Inscrito';
             pushButton.disabled = true;
         }
-        // ✅ Re-registra silenciosamente caso o servidor tenha reiniciado
-        //    (evita perder inscrições após restart do Flask)
-        salvarInscricaoNoBackend(subscription, usuarioLogado);
+        
+        // Só tenta salvar se o usuário já fez login!
+        if (usuarioLogado) {
+            salvarInscricaoNoBackend(subscription, usuarioLogado);
+        }
     }
 }
  
